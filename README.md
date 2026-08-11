@@ -146,7 +146,7 @@ format are provided by the unmodified upstream image.
 
 ## Contributing
 
-See [AGENTS.md](AGENTS.md) for this repository's development workflow and the
+See [UPDATING.md](UPDATING.md) for this repository's development workflow and the
 local StartOS packaging-guide entry point.
 
 ## Quick Reference for AI Consumers
