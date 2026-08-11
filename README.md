@@ -50,17 +50,17 @@ One StartOS volume named `main` is backed up as a unit:
 | --- | --- | --- |
 | `config/` | `/config` | Upstream-generated `greeting.html` and future container configuration |
 | `storage/` | `/storage` | Received messages and mailbox indexes |
-| `store.json` | Not mounted into the container | StartOS-managed disposable-domain setting |
+| `store.json` | Not mounted into the container | StartOS-managed domain, retention, and mailbox-limit settings |
 
 The package selects Inbucket's file-storage backend. Mail therefore survives
 service and server restarts.
 
 ## Installation and First-Run Flow
 
-A critical **Configure Domain** task appears on a clean install. Inbucket cannot
+A critical **Configure Inbucket** task appears on a clean install. Inbucket cannot
 start until the user enters a fully qualified recipient domain. The action
-stores the domain and the daemon reads it reactively, so later changes rebuild
-the daemon configuration.
+stores the domain, retention period, and per-mailbox message limit. The daemon
+reads these values reactively, so later changes rebuild its configuration.
 
 ## Configuration Management
 
@@ -70,7 +70,8 @@ the daemon configuration.
 | Web UI and REST listener on port 9000 | Webmail, monitor, message display, deletion, and API handlers |
 | Accepted and stored recipient domain | Mailbox naming by local part |
 | File storage at `/storage` | Upstream flat-file storage implementation |
-| One-hour retention period | Per-mailbox limit and periodic retention scan |
+| Configurable retention period | Periodic retention scan |
+| Configurable per-mailbox message limit | Older-message deletion when the limit is exceeded |
 | 30-second SMTP idle timeout | SMTP protocol handling |
 | POP3 bound to container loopback only | Embedded POP3 daemon remains available inside the container |
 
@@ -98,12 +99,12 @@ not an SMTP transport.
 
 ## Actions
 
-### Configure Domain
+### Configure Inbucket
 
 - **Visibility:** Enabled
 - **Availability:** Any service status
-- **Input:** One fully qualified disposable-mail domain
-- **Effect:** Restricts both SMTP acceptance and message storage to that domain
+- **Inputs:** One fully qualified disposable-mail domain, a retention period from 15 minutes to 7 days, and a per-mailbox limit from 1 to 10,000 messages
+- **Effect:** Restricts SMTP acceptance and storage to that domain and applies the selected storage limits
 - **Output:** A confirmation; no credentials or secrets
 
 ## Backups and Restore
@@ -177,6 +178,7 @@ startos_managed_env_vars:
   - INBUCKET_STORAGE_TYPE
   - INBUCKET_STORAGE_PARAMS
   - INBUCKET_STORAGE_RETENTIONPERIOD
+  - INBUCKET_STORAGE_MAILBOXMSGCAP
 actions:
   - configure-domain
 ```

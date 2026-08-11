@@ -11,11 +11,11 @@
 - **Web Interface** for opening disposable mailboxes and inspecting messages.
 - **REST API** for retrieving and deleting mail programmatically.
 - **Inbound SMTP** for receiving mail addressed to your disposable domain.
-- Persistent message storage with automatic deletion after approximately one hour.
+- Persistent message storage with configurable retention and per-mailbox limits.
 
 ## Getting set up
 
-1. Complete **Configure Domain** and enter a fully qualified domain you control, such as `temp.example.com`.
+1. Complete **Configure Inbucket**, enter a fully qualified domain you control such as `temp.example.com`, and choose the message retention and per-mailbox limit.
 2. Start Inbucket and wait for the **Web Interface** and **Inbound SMTP** health checks to become ready.
 3. Enable the StartTunnel gateway for the **Inbound SMTP** interface. Note the assigned SMTP port shown by StartOS, which is normally `2500`.
 4. In StartTunnel, add a manual published port with these values:
@@ -76,9 +76,9 @@ Mailboxes are created when mail arrives; there is no account-registration step. 
 
 Use the **REST API** interface for automated tests and integrations. The upstream API documentation describes listing a mailbox, retrieving message content or source, deleting a message, and purging a mailbox.
 
-### Configure Domain action
+### Configure Inbucket action
 
-Run **Configure Domain** whenever the recipient domain changes. Inbucket reloads with the new domain and rejects messages addressed to the previous domain. Existing stored mailboxes are not renamed.
+Run **Configure Inbucket** whenever the recipient domain or storage limits change. Inbucket reloads with the new settings and rejects messages addressed to the previous domain. Existing stored mailboxes are not renamed. Reducing retention or the message limit can delete older stored messages.
 
 ### Inbound SMTP
 
@@ -86,4 +86,4 @@ The SMTP interface receives messages; it is independent from the StartOS system 
 
 ## Limitations
 
-POP3 is not exposed as a StartOS interface. The SMTP listener does not provide STARTTLS in this package. Stored messages expire after approximately one hour, and the Web Interface has no upstream login mechanism.
+POP3 is not exposed as a StartOS interface. The SMTP listener does not provide STARTTLS in this package. Retention can be set from 15 minutes to 7 days, the per-mailbox message limit can be set from 1 to 10,000, and the Web Interface has no upstream login mechanism.
