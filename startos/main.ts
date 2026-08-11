@@ -4,8 +4,9 @@ import { storeJson } from './fileModels/store.json'
 import { mounts, pop3Port, smtpPort, webPort } from './utils'
 
 export const main = sdk.setupMain(async ({ effects }) => {
-  const domain = await storeJson.read((store) => store.domain).const(effects)
-  if (!domain) throw new Error('Disposable mail domain is not configured')
+  const config = await storeJson.read((store) => store).const(effects)
+  if (!config?.domain)
+    throw new Error('Disposable mail domain is not configured')
 
   const subcontainer = sdk.SubContainer.of(
     effects,
@@ -22,17 +23,18 @@ export const main = sdk.setupMain(async ({ effects }) => {
         env: {
           INBUCKET_MAILBOXNAMING: 'local',
           INBUCKET_SMTP_ADDR: `0.0.0.0:${smtpPort}`,
-          INBUCKET_SMTP_DOMAIN: domain,
+          INBUCKET_SMTP_DOMAIN: config.domain,
           INBUCKET_SMTP_DEFAULTACCEPT: 'false',
-          INBUCKET_SMTP_ACCEPTDOMAINS: domain,
+          INBUCKET_SMTP_ACCEPTDOMAINS: config.domain,
           INBUCKET_SMTP_DEFAULTSTORE: 'false',
-          INBUCKET_SMTP_STOREDOMAINS: domain,
+          INBUCKET_SMTP_STOREDOMAINS: config.domain,
           INBUCKET_SMTP_TIMEOUT: '30s',
           INBUCKET_WEB_ADDR: `0.0.0.0:${webPort}`,
           INBUCKET_POP3_ADDR: `127.0.0.1:${pop3Port}`,
           INBUCKET_STORAGE_TYPE: 'file',
           INBUCKET_STORAGE_PARAMS: 'path:/storage',
-          INBUCKET_STORAGE_RETENTIONPERIOD: '1h',
+          INBUCKET_STORAGE_RETENTIONPERIOD: config.retentionPeriod,
+          INBUCKET_STORAGE_MAILBOXMSGCAP: String(config.mailboxMessageCap),
         },
       },
       ready: {

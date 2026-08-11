@@ -1,18 +1,18 @@
 import { IMPOSSIBLE, VersionInfo } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '3.1.1:1',
+  version: '3.1.1:2',
   releaseNotes: {
     en_US:
-      'Improves icon contrast on light and dark themes and documents public SMTP delivery through StartTunnel, including DNS and port forwarding.',
+      'Adds StartOS settings for message retention and the per-mailbox message limit.',
     es_ES:
-      'Mejora el contraste del icono en temas claros y oscuros y documenta la entrega SMTP pública mediante StartTunnel, incluida la configuración de DNS y reenvío de puertos.',
+      'Añade ajustes de StartOS para la retención de mensajes y el límite de mensajes por buzón.',
     de_DE:
-      'Verbessert den Icon-Kontrast in hellen und dunklen Designs und dokumentiert den öffentlichen SMTP-Empfang über StartTunnel einschließlich DNS- und Portweiterleitung.',
+      'Fügt StartOS-Einstellungen für die Nachrichtenaufbewahrung und das Nachrichtenlimit pro Postfach hinzu.',
     pl_PL:
-      'Poprawia kontrast ikony w jasnych i ciemnych motywach oraz dokumentuje publiczne dostarczanie SMTP przez StartTunnel, w tym konfigurację DNS i przekierowanie portów.',
+      'Dodaje ustawienia StartOS dotyczące czasu przechowywania wiadomości i limitu wiadomości na skrzynkę.',
     fr_FR:
-      'Améliore le contraste de l’icône dans les thèmes clairs et sombres et documente la réception SMTP publique via StartTunnel, y compris la configuration DNS et la redirection de port.',
+      'Ajoute des réglages StartOS pour la durée de conservation et la limite de messages par boîte.',
   },
   migrations: {
     up: async ({ effects }) => {},

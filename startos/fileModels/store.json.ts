@@ -7,6 +7,8 @@ export const domainRegex =
 const shape = z
   .object({
     domain: z.string().regex(domainRegex).catch(''),
+    retentionPeriod: z.enum(['15m', '1h', '6h', '24h', '168h']).catch('1h'),
+    mailboxMessageCap: z.number().int().min(1).max(10000).catch(300),
   })
   .strip()
 

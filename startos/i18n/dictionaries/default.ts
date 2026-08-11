@@ -20,6 +20,20 @@ const dict = {
   'Domain Saved': 16,
   'Inbucket will accept and store mail for the configured domain. DNS and public TCP forwarding must be configured separately.': 17,
   'Configure the disposable mail domain before starting Inbucket.': 18,
+  'Message Retention': 19,
+  'Delete messages after this amount of time.': 20,
+  '15 minutes': 21,
+  '1 hour': 22,
+  '6 hours': 23,
+  '24 hours': 24,
+  '7 days': 25,
+  'Messages per Mailbox': 26,
+  'Older messages are deleted when this limit is exceeded.': 27,
+  'Configure Inbucket': 28,
+  'Choose the recipient domain, message retention period, and per-mailbox message limit.': 29,
+  'Configuration Saved': 30,
+  'Inbucket will use the configured domain and storage limits. DNS and public TCP forwarding must be configured separately.': 31,
+  'Messages addressed to any other domain will be rejected. Changing the domain does not rename existing mailboxes. Reducing retention or the message limit can delete older stored messages.': 32,
 } as const
 
 /**

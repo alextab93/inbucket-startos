@@ -24,17 +24,40 @@ const inputSpec = InputSpec.of({
       },
     ],
   }),
+  retentionPeriod: Value.select({
+    name: i18n('Message Retention'),
+    description: i18n('Delete messages after this amount of time.'),
+    default: '1h',
+    values: {
+      '15m': i18n('15 minutes'),
+      '1h': i18n('1 hour'),
+      '6h': i18n('6 hours'),
+      '24h': i18n('24 hours'),
+      '168h': i18n('7 days'),
+    },
+  }),
+  mailboxMessageCap: Value.number({
+    name: i18n('Messages per Mailbox'),
+    description: i18n(
+      'Older messages are deleted when this limit is exceeded.',
+    ),
+    required: true,
+    default: 300,
+    integer: true,
+    min: 1,
+    max: 10000,
+  }),
 })
 
 export const configureDomain = sdk.Action.withInput(
   'configure-domain',
   {
-    name: i18n('Configure Domain'),
+    name: i18n('Configure Inbucket'),
     description: i18n(
-      'Choose the recipient domain accepted by the inbound SMTP listener.',
+      'Choose the recipient domain, message retention period, and per-mailbox message limit.',
     ),
     warning: i18n(
-      'Messages addressed to any other domain will be rejected. Changing the domain does not rename existing mailboxes.',
+      'Messages addressed to any other domain will be rejected. Changing the domain does not rename existing mailboxes. Reducing retention or the message limit can delete older stored messages.',
     ),
     allowedStatuses: 'any',
     group: null,
@@ -42,21 +65,29 @@ export const configureDomain = sdk.Action.withInput(
   },
   inputSpec,
   async () => {
-    const domain = await storeJson.read((store) => store.domain).once()
-    return { domain: domain || undefined }
+    const config = await storeJson.read((store) => store).once()
+    return {
+      domain: config?.domain || undefined,
+      retentionPeriod: config?.retentionPeriod ?? '1h',
+      mailboxMessageCap: config?.mailboxMessageCap ?? 300,
+    }
   },
   async ({ effects, input }) => {
     const domain = input.domain.trim().toLowerCase()
     if (!domainRegex.test(domain)) {
       throw new Error('Invalid disposable mail domain')
     }
-    await storeJson.merge(effects, { domain })
+    await storeJson.merge(effects, {
+      domain,
+      retentionPeriod: input.retentionPeriod,
+      mailboxMessageCap: input.mailboxMessageCap,
+    })
 
     return {
       version: '1',
-      title: i18n('Domain Saved'),
+      title: i18n('Configuration Saved'),
       message: i18n(
-        'Inbucket will accept and store mail for the configured domain. DNS and public TCP forwarding must be configured separately.',
+        'Inbucket will use the configured domain and storage limits. DNS and public TCP forwarding must be configured separately.',
       ),
       result: null,
     }

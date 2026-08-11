@@ -50,17 +50,17 @@ One StartOS volume named `main` is backed up as a unit:
 | --- | --- | --- |
 | `config/` | `/config` | Upstream-generated `greeting.html` and future container configuration |
 | `storage/` | `/storage` | Received messages and mailbox indexes |
-| `store.json` | Not mounted into the container | StartOS-managed disposable-domain setting |
+| `store.json` | Not mounted into the container | StartOS-managed domain, retention, and mailbox-limit settings |
 
 The package selects Inbucket's file-storage backend. Mail therefore survives
 service and server restarts.
 
 ## Installation and First-Run Flow
 
-A critical **Configure Domain** task appears on a clean install. Inbucket cannot
+A critical **Configure Inbucket** task appears on a clean install. Inbucket cannot
 start until the user enters a fully qualified recipient domain. The action
-stores the domain and the daemon reads it reactively, so later changes rebuild
-the daemon configuration.
+stores the domain, retention period, and per-mailbox message limit. The daemon
+reads these values reactively, so later changes rebuild its configuration.
 
 ## Configuration Management
 
@@ -70,7 +70,8 @@ the daemon configuration.
 | Web UI and REST listener on port 9000 | Webmail, monitor, message display, deletion, and API handlers |
 | Accepted and stored recipient domain | Mailbox naming by local part |
 | File storage at `/storage` | Upstream flat-file storage implementation |
-| One-hour retention period | Per-mailbox limit and periodic retention scan |
+| Configurable retention period | Periodic retention scan |
+| Configurable per-mailbox message limit | Older-message deletion when the limit is exceeded |
 | 30-second SMTP idle timeout | SMTP protocol handling |
 | POP3 bound to container loopback only | Embedded POP3 daemon remains available inside the container |
 
@@ -98,19 +99,22 @@ not an SMTP transport.
 
 ## Actions
 
-### Configure Domain
+### Configure Inbucket
 
 - **Visibility:** Enabled
 - **Availability:** Any service status
-- **Input:** One fully qualified disposable-mail domain
-- **Effect:** Restricts both SMTP acceptance and message storage to that domain
+- **Inputs:** One fully qualified disposable-mail domain, a retention period from 15 minutes to 7 days, and a per-mailbox limit from 1 to 10,000 messages
+- **Effect:** Restricts SMTP acceptance and storage to that domain and applies the selected storage limits
 - **Output:** A confirmation; no credentials or secrets
 
 ## Backups and Restore
 
 StartOS snapshots the complete `main` volume while the service is stopped. The
 backup includes received mail, mailbox indexes, the customized greeting file,
-and the configured recipient domain. Restore uses the SDK's volume restore flow
+and the configured domain and storage limits. The Monitor's recent-message
+history is held in memory and is not a separate backup dataset. After a restore,
+mailbox messages return from `/storage`, while Monitor history begins empty and
+repopulates as new messages arrive. Restore uses the SDK's volume restore flow
 and then reapplies interfaces, actions, and daemon configuration.
 
 ## Health Checks
@@ -129,7 +133,7 @@ None. Inbucket embeds its SMTP, HTTP, POP3, and file-storage services.
 
 1. Only mail for the configured domain is accepted and stored. Upstream accepts
    every recipient domain by default.
-2. Messages expire after one hour rather than the upstream container default.
+2. Message retention is configurable from 15 minutes to 7 days.
 3. POP3 is not exported as a StartOS interface.
 4. Inbucket does not authenticate mailbox viewers. Keep the Web Interface and
    REST API limited to trusted gateway addresses.
@@ -146,8 +150,7 @@ format are provided by the unmodified upstream image.
 
 ## Contributing
 
-See [UPDATING.md](UPDATING.md) for this repository's development workflow and the
-local StartOS packaging-guide entry point.
+See [UPDATING.md](UPDATING.md) for this repository's development workflow and the local StartOS packaging-guide entry point.
 
 ## Quick Reference for AI Consumers
 
@@ -177,6 +180,7 @@ startos_managed_env_vars:
   - INBUCKET_STORAGE_TYPE
   - INBUCKET_STORAGE_PARAMS
   - INBUCKET_STORAGE_RETENTIONPERIOD
+  - INBUCKET_STORAGE_MAILBOXMSGCAP
 actions:
   - configure-domain
 ```
