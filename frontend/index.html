@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; form-action 'self'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>Private Inbucket | Alexander Taborda Acosta</title>
+  <meta name="description" content="Private Inbucket mailbox viewer.">
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <link rel="stylesheet" href="./css/base.css">
+  <link rel="stylesheet" href="./css/hero.css">
+  <link rel="stylesheet" href="./css/inbucket.css">
+  <link rel="stylesheet" href="./css/responsive.css">
+  <script type="module" src="./js/inbucket.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="inbucket-header">
+    <div class="container inbucket-header-content">
+      <div>
+        <p class="kicker">Private workspace</p>
+        <h1>Inbucket</h1>
+      </div>
+      <button id="sign-out" class="button button-secondary" type="button" hidden>Sign out</button>
+    </div>
+  </header>
+  <main id="main-content" class="container inbucket-main" tabindex="-1">
+    <section id="access-screen" class="inbucket-access" aria-labelledby="access-title">
+      <p class="kicker">Private access</p>
+      <h2 id="access-title">Sign in</h2>
+      <form id="login-form" class="login-form">
+        <label>Username<input id="username" name="username" autocomplete="username" required></label>
+        <label>Password<input id="password" name="password" type="password" autocomplete="current-password" required></label>
+        <button class="button button-primary" type="submit">Sign in</button>
+      </form>
+      <p id="access-message" class="status-message" role="status" aria-live="assertive">Checking for an active session.</p>
+    </section>
+    <div id="mailbox-view" hidden>
+      <div class="inbucket-tabs" role="tablist" aria-label="Mailbox views">
+        <button id="mailboxes-tab" class="inbucket-tab" type="button" role="tab" aria-selected="true">Mailboxes</button>
+        <button id="monitor-tab" class="inbucket-tab" type="button" role="tab" aria-selected="false">Monitor</button>
+        <button id="archive-tab" class="inbucket-tab" type="button" role="tab" aria-selected="false">Archived</button>
+      </div>
+      <section id="monitor-view" class="monitor-view" aria-labelledby="monitor-title" hidden>
+        <div class="monitor-heading">
+          <div><h2 id="monitor-title">Realtime monitor</h2><p>Recent deliveries from the Inbucket monitor. Message bodies are not stored here.</p></div>
+          <p id="monitor-status" class="status-message" role="status" aria-live="polite"></p>
+        </div>
+        <div id="monitor-message-list" class="monitor-message-list"></div>
+      </section>
+      <section id="archive-view" class="archive-view" aria-labelledby="archived-mailboxes-title" hidden>
+        <h2 id="archived-mailboxes-title">Archived mailboxes</h2>
+        <p>Archived mailboxes remain in Inbucket but are hidden from the main mailbox selector.</p>
+        <div id="archived-mailbox-options" class="archived-mailbox-options"></div>
+      </section>
+      <div id="mailboxes-view">
+      <section class="mailbox-selector" aria-labelledby="saved-mailboxes-title">
+        <div class="mailbox-selector-heading">
+          <h2 id="saved-mailboxes-title">Saved mailboxes</h2>
+          <div class="mailbox-selector-actions">
+            <button id="select-all-mailboxes" class="button button-secondary" type="button">Select all</button>
+            <button id="clear-mailboxes" class="button button-secondary" type="button">Clear</button>
+            <button id="archive-mailboxes" class="button button-secondary" type="button">Archive selected</button>
+            <button id="delete-mailboxes" class="button button-danger" type="button">Delete selected</button>
+          </div>
+        </div>
+        <div id="mailbox-options" class="mailbox-options" role="group" aria-labelledby="saved-mailboxes-title"></div>
+      </section>
+      <form id="mailbox-form" class="mailbox-form">
+        <label for="mailbox-name">Add a mailbox</label>
+        <div>
+          <input id="mailbox-name" name="mailbox" autocomplete="off" required>
+          <button class="button button-primary" type="submit">Add and open</button>
+        </div>
+      </form>
+      <p id="mailbox-status" class="status-message mailbox-status" role="status" aria-live="polite"></p>
+      <div class="mailbox-layout">
+        <section class="message-list-panel" aria-labelledby="mailbox-title">
+          <h2 id="mailbox-title">Messages</h2>
+          <div id="message-list" class="message-list"></div>
+        </section>
+        <article id="message-panel" class="message-panel" aria-labelledby="message-subject">
+          <div id="message-empty" class="message-empty">Select a message to read it.</div>
+          <div id="message-content" hidden>
+            <header class="message-header">
+              <div class="message-title-actions"><h2 id="message-subject"></h2><button id="delete-message" class="button button-danger" type="button">Delete message</button></div>
+              <dl>
+                <div><dt>From</dt><dd id="message-from"></dd></div>
+                <div><dt>To</dt><dd id="message-to"></dd></div>
+                <div><dt>Date</dt><dd id="message-date"></dd></div>
+              </dl>
+            </header>
+            <div id="message-body" class="message-body"></div>
+            <section id="message-attachments" class="message-attachments" aria-labelledby="message-attachments-title" hidden>
+              <h3 id="message-attachments-title">Attachments</h3>
+              <ul id="message-attachment-list"></ul>
+            </section>
+            <button id="source-toggle" class="source-toggle" type="button" aria-expanded="false">View source</button>
+            <p id="source-status" class="status-message" role="status" aria-live="polite"></p>
+            <pre id="message-source" class="message-source" hidden></pre>
+          </div>
+        </article>
+      </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

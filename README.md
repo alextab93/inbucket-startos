@@ -1,186 +1,119 @@
 # Inbucket for StartOS
 
-Run a private disposable-email service on StartOS. Inbucket receives SMTP mail
-for a domain you control and makes captured messages available through a web
-interface and REST API, without delivering mail to external recipients.
+Inbucket receives SMTP mail for a domain you control. This package combines the
+upstream Inbucket receiver with an authenticated Rails mailbox client, while
+preserving the upstream administration interface and REST API.
 
 ## Quick start (StartOS)
 
-Install Inbucket from the start9.tabordalab.com (TabordaLab StartOS registry),
-or sideload the `.s9pk` package from this repository's GitHub release.
+Install Inbucket from the start9.tabordalab.com (TabordaLab StartOS registry), or sideload the `.s9pk` package from this repository's GitHub release.
 
 <img width="1419" height="527" alt="image" src="https://github.com/user-attachments/assets/38d7f4f6-73e2-4b8d-a855-b00aa41f852f" />
 
-> **Upstream docs:** <https://book.inbucket.org/>
->
-> Everything not listed here should behave the same as upstream Inbucket. If a
-> feature, setting, or behavior is not mentioned here, the upstream
-> documentation is applicable.
+## Interfaces
 
-This repository packages [Inbucket](https://github.com/inbucket/inbucket), an
-SMTP receiver that exposes captured mail through webmail and a REST API.
+| Interface | ID | Purpose | Access guidance |
+| --- | --- | --- | --- |
+| Web Client Interface | `client` | Authenticated mailbox reading, monitor, source, CID images, and downloads | Normal user interface |
+| Admin Web Interface | `ui` | Upstream webmail, status, and diagnostics | Trusted gateway addresses only |
+| REST API | `rest-api` | Upstream automated mailbox API at `/api/v1/` | Trusted gateway addresses only |
+| Inbound SMTP | `smtp` | Receives mail for the configured domain | Raw TCP delivery |
 
-## Table of Contents
+The Web Client Interface is the ordinary mailbox interface. It has generated
+administrator credentials, encrypted HTTP-only sessions, private no-store API
+responses, a strict same-origin CSP, sanitized HTML, and a same-origin CID
+image proxy for AVIF, GIF, JPEG, PNG, and WebP.
 
-- [Image and Container Runtime](#image-and-container-runtime)
-- [Volume and Data Layout](#volume-and-data-layout)
-- [Installation and First-Run Flow](#installation-and-first-run-flow)
-- [Configuration Management](#configuration-management)
-- [Network Access and Interfaces](#network-access-and-interfaces)
-- [Actions](#actions)
-- [Backups and Restore](#backups-and-restore)
-- [Health Checks](#health-checks)
-- [Dependencies](#dependencies)
-- [Limitations and Differences](#limitations-and-differences)
-- [What Is Unchanged from Upstream](#what-is-unchanged-from-upstream)
-- [Contributing](#contributing)
-- [Quick Reference for AI Consumers](#quick-reference-for-ai-consumers)
+The Admin Web Interface is the unmodified upstream interface. It deliberately
+has no mailbox authentication. Do not publish it through untrusted gateway
+addresses. The REST API has the same upstream mailbox exposure and should be
+treated accordingly.
 
-## Image and Container Runtime
+## Runtime
 
-The package uses the unmodified official `inbucket/inbucket` image and its
-upstream entrypoint. The OCI index is pinned by digest in the manifest and
-contains native x86_64 and aarch64 images.
+The package keeps the pinned upstream `inbucket/inbucket` image for SMTP,
+storage, upstream webmail, and REST. A separate `client` image builds the Vite
+frontend and runs the Rails application. A private PostgreSQL sidecar stores
+the client administrator, sessions, saved mailbox catalog, and monitor
+summaries.
 
-## Volume and Data Layout
+The Rails client reaches Inbucket through the StartOS bridge address for the
+package's own web host. It does not use Compose DNS or loopback to cross
+subcontainers.
 
-One StartOS volume named `main` is backed up as a unit:
+## Upstream provenance
 
-| Volume subpath | Container path | Purpose |
-| --- | --- | --- |
-| `config/` | `/config` | Upstream-generated `greeting.html` and future container configuration |
-| `storage/` | `/storage` | Received messages and mailbox indexes |
-| `store.json` | Not mounted into the container | StartOS-managed domain, retention, and mailbox-limit settings |
+StartOS package version `3.1.1:3` retains the official multi-architecture
+Inbucket image. The image is not rebuilt from the submodule.
 
-The package selects Inbucket's file-storage backend. Mail therefore survives
-service and server restarts.
-
-## Installation and First-Run Flow
-
-A critical **Configure Inbucket** task appears on a clean install. Inbucket cannot
-start until the user enters a fully qualified recipient domain. The action
-stores the domain, retention period, and per-mailbox message limit. The daemon
-reads these values reactively, so later changes rebuild its configuration.
-
-## Configuration Management
-
-| StartOS-managed | Upstream behavior retained |
+| Component | Immutable source |
 | --- | --- |
-| SMTP listener on port 2500 | SMTP message parsing and mailbox creation |
-| Web UI and REST listener on port 9000 | Webmail, monitor, message display, deletion, and API handlers |
-| Accepted and stored recipient domain | Mailbox naming by local part |
-| File storage at `/storage` | Upstream flat-file storage implementation |
-| Configurable retention period | Periodic retention scan |
-| Configurable per-mailbox message limit | Older-message deletion when the limit is exceeded |
-| 30-second SMTP idle timeout | SMTP protocol handling |
-| POP3 bound to container loopback only | Embedded POP3 daemon remains available inside the container |
+| Upstream release | `v3.1.1` |
+| `upstream-project` commit | `6eff554469f681ab99f540fc440e24e06a7be636` |
+| Main image | `inbucket/inbucket:3.1.1@sha256:4a4c4cf553967e1863e4f48c828774786ac9ee73c53b3a3ecef10f66e5a2cdfb` |
 
-The package deliberately does not add the StartOS outbound SMTP credentials
-form. Stock Inbucket receives mail but has no outbound SMTP client, forwarding,
-or notification feature. StartOS system SMTP credentials are therefore not
-passed to Inbucket.
+The upstream release workflow builds the `3.1.1` and `sha-6eff554` image tags
+from the same tagged source commit. Docker Hub reports the same architecture
+digests for both tags. The manifest pins the multi-architecture `3.1.1` digest,
+so the submodule documents and audits the upstream source without changing the
+runtime image provenance.
 
-## Network Access and Interfaces
+| Volume | Contents |
+| --- | --- |
+| `main` | Existing upstream `/config`, `/storage`, and StartOS domain settings |
+| `client-config` | Generated Rails secret and client credentials |
+| `client-postgres` | Private PostgreSQL state for the authenticated client |
 
-| Interface | Internal port | Protocol | Purpose |
-| --- | ---: | --- | --- |
-| Web Interface | 9000 | HTTP | Browser mailbox and message UI |
-| REST API | 9000 | HTTP | `/api/v1/` mailbox and message API |
-| Inbound SMTP | 2500 | Raw SMTP over TCP | Mail delivery for the configured recipient domain |
+Backups retain the existing `main` volume and add the client configuration
+volume plus a PostgreSQL dump of `client-postgres`.
 
-The package declares these interfaces; the administrator decides which gateway
-addresses are enabled. It does not create public DNS, enable Tor, or make SMTP
-public automatically.
+## Setup and operations
 
-Internet MX delivery normally requires an `A` record for a mail host, an `MX`
-record pointing the disposable domain at that host, and raw TCP forwarding from
-public port 25 to the assigned Inbucket SMTP interface. An HTTP reverse proxy is
-not an SMTP transport.
+1. Run **Configure Inbucket** with the recipient domain, retention period, and
+   per-mailbox message limit.
+2. Run **Show Login Credentials** to retrieve the generated Web Client
+   Interface credentials.
+3. Use **Refresh Login Password** to rotate the client password. It restarts
+   the service and invalidates existing client sessions.
+4. Configure DNS and raw TCP forwarding for port 25 to the StartOS Inbound SMTP
+   interface as described in [instructions.md](instructions.md).
 
-## Actions
+Inbucket is an SMTP receiver, not an outbound SMTP client. This package does
+not use StartOS outbound SMTP credentials or forward received mail externally.
 
-### Configure Inbucket
+## Security behavior
 
-- **Visibility:** Enabled
-- **Availability:** Any service status
-- **Inputs:** One fully qualified disposable-mail domain, a retention period from 15 minutes to 7 days, and a per-mailbox limit from 1 to 10,000 messages
-- **Effect:** Restricts SMTP acceptance and storage to that domain and applies the selected storage limits
-- **Output:** A confirmation; no credentials or secrets
+The client renders untrusted HTML only after sanitization. Its CSP does not
+allow third-party image loads or `cid:` URLs. CID images are fetched through an
+authenticated same-origin endpoint and only supported raster formats are
+returned. Attachments are authenticated downloads with their declared MIME
+type, `Content-Disposition: attachment`, and `X-Content-Type-Options: nosniff`.
+PDF, HTML, SVG, and other active content are not embedded. A PDF viewer remains
+a separate follow-up.
 
-## Backups and Restore
+## Standalone Inbucket Client migration
 
-StartOS snapshots the complete `main` volume while the service is stopped. The
-backup includes received mail, mailbox indexes, the customized greeting file,
-and the configured domain and storage limits. The Monitor's recent-message
-history is held in memory and is not a separate backup dataset. After a restore,
-mailbox messages return from `/storage`, while Monitor history begins empty and
-repopulates as new messages arrive. Restore uses the SDK's volume restore flow
-and then reapplies interfaces, actions, and daemon configuration.
+The first integrated release starts with clean client state under the Inbucket
+package ID. It does not automatically move the standalone `inbucket-client`
+PostgreSQL volume, uninstall the standalone package, or promise a silent
+upgrade. Keep the standalone package installed until an export/import
+procedure for credentials and saved mailbox state has been validated on a
+non-production server.
 
-## Health Checks
+After live migration validation and release verification, the standalone
+package can be marked deprecated in its documentation and registry listing.
 
-- Daemon readiness checks that the web listener has bound port 9000.
-- A standalone **Inbound SMTP** check monitors whether port 2500 is listening.
+## Development
 
-Both checks inspect listening sockets without transmitting a message or
-exposing stored mail.
-
-## Dependencies
-
-None. Inbucket embeds its SMTP, HTTP, POP3, and file-storage services.
-
-## Limitations and Differences
-
-1. Only mail for the configured domain is accepted and stored. Upstream accepts
-   every recipient domain by default.
-2. Message retention is configurable from 15 minutes to 7 days.
-3. POP3 is not exported as a StartOS interface.
-4. Inbucket does not authenticate mailbox viewers. Keep the Web Interface and
-   REST API limited to trusted gateway addresses.
-5. The inbound SMTP interface is plaintext SMTP. The package does not generate
-   certificates or enable Inbucket STARTTLS.
-6. There is no outbound SMTP action because upstream provides no outbound SMTP
-   feature. Adding forwarding would require a separately specified component.
-
-## What Is Unchanged from Upstream
-
-The webmail UI, real-time monitor, REST API, MIME/attachment rendering, mailbox
-creation, local-part mailbox naming, SMTP protocol handling, and file-storage
-format are provided by the unmodified upstream image.
-
-## Contributing
-
-See [UPDATING.md](UPDATING.md) for this repository's development workflow and the local StartOS packaging-guide entry point.
-
-## Quick Reference for AI Consumers
-
-```yaml
-package_id: inbucket
-architectures: [x86_64, aarch64]
-volumes:
-  main:
-    - /config
-    - /storage
-ports:
-  web_and_rest: 9000
-  inbound_smtp: 2500
-  pop3_loopback_only: 1100
-dependencies: none
-startos_managed_env_vars:
-  - INBUCKET_MAILBOXNAMING
-  - INBUCKET_SMTP_ADDR
-  - INBUCKET_SMTP_DOMAIN
-  - INBUCKET_SMTP_DEFAULTACCEPT
-  - INBUCKET_SMTP_ACCEPTDOMAINS
-  - INBUCKET_SMTP_DEFAULTSTORE
-  - INBUCKET_SMTP_STOREDOMAINS
-  - INBUCKET_SMTP_TIMEOUT
-  - INBUCKET_WEB_ADDR
-  - INBUCKET_POP3_ADDR
-  - INBUCKET_STORAGE_TYPE
-  - INBUCKET_STORAGE_PARAMS
-  - INBUCKET_STORAGE_RETENTIONPERIOD
-  - INBUCKET_STORAGE_MAILBOXMSGCAP
-actions:
-  - configure-domain
+```sh
+npm ci
+npm run check
+npm run build
+node node_modules/@start9labs/start-sdk/lint.mjs
+bundle exec rspec
+make arches
 ```
+
+The Rails request and service specs require a real PostgreSQL test database.
+Build package architectures serially from a clean signed commit and inspect
+each S9PK manifest and commitment before publishing.

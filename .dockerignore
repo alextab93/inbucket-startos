@@ -1,3 +1,11 @@
 .git
 .gitmodules
 .ai-workspace
+node_modules
+javascript
+public
+*.s9pk
+log/*
+tmp/*
+spec
+test

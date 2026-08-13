@@ -1,91 +1,64 @@
 # Inbucket
 
-## Documentation
+## What you get
 
-- [Inbucket manual](https://book.inbucket.org/), the upstream user and reference guide.
-- [Configuration reference](https://book.inbucket.org/configuration/index.html), covering upstream SMTP, web, storage, and mailbox behavior.
-- [REST API reference](https://book.inbucket.org/rest/index.html), covering mailbox and message endpoints under `/api/v1/`.
+- **Web Client Interface** is the normal authenticated mailbox reader.
+- **Admin Web Interface** is upstream Inbucket webmail, status, and diagnostics.
+- **REST API** provides upstream mailbox automation at `/api/v1/`.
+- **Inbound SMTP** receives messages for your configured domain.
 
-## What you get on StartOS
+The Admin Web Interface and REST API do not add upstream mailbox authentication.
+Expose them only through trusted StartOS gateway addresses. Use the Web Client
+Interface for normal mailbox access.
 
-- **Web Interface** for opening disposable mailboxes and inspecting messages.
-- **REST API** for retrieving and deleting mail programmatically.
-- **Inbound SMTP** for receiving mail addressed to your disposable domain.
-- Persistent message storage with configurable retention and per-mailbox limits.
+## First setup
 
-## Getting set up
+1. Complete **Configure Inbucket** with a fully qualified domain you control,
+   such as `temp.example.com`, then choose retention and mailbox limits.
+2. Wait for **Admin Web Interface**, **Inbound SMTP**, **Client Database**,
+   **Web Client Interface**, and **Client Monitor** to become ready.
+3. Run **Show Login Credentials** and open the **Web Client Interface** with
+   the generated username and password.
+4. Rotate client credentials with **Refresh Login Password** when needed. This
+   signs out current Web Client Interface sessions.
 
-1. Complete **Configure Inbucket**, enter a fully qualified domain you control such as `temp.example.com`, and choose the message retention and per-mailbox limit.
-2. Start Inbucket and wait for the **Web Interface** and **Inbound SMTP** health checks to become ready.
-3. Enable the StartTunnel gateway for the **Inbound SMTP** interface. Note the assigned SMTP port shown by StartOS, which is normally `2500`.
-4. In StartTunnel, add a manual published port with these values:
+## Receiving Internet mail
 
-   | Field | Value |
-   | --- | --- |
-   | Label | `StartOS Inbucket` |
-   | External Port | `25` |
-   | Server | The StartOS server running Inbucket |
-   | Internal Port | The assigned SMTP port, normally `2500` |
-   | Number of Ports | `1` |
-   | IP Version | `IPv4` |
-   | Hostname | Leave blank |
-
-5. Allow inbound TCP port `25` in the VPS provider firewall when it uses a separate cloud firewall.
-6. Add an A record for the mail server hostname and an MX record for the disposable recipient domain. For `temp.example.com`, use:
+1. Enable the StartTunnel gateway for **Inbound SMTP** and note its assigned
+   StartOS port, normally `2500`.
+2. In StartTunnel, create a manual published port from external TCP `25` to the
+   Inbucket SMTP port on the StartOS server.
+3. Allow inbound TCP port `25` in any cloud firewall.
+4. Add an A record for the mail host and an MX record for the recipient domain.
+   For `temp.example.com`:
 
    ```dns
    mx.temp.example.com.  A      203.0.113.10
    temp.example.com.     MX 10  mx.temp.example.com.
    ```
 
-   Replace `203.0.113.10` with the public IPv4 address shown by StartTunnel. In DNS forms that append the zone name automatically, enter `mx.temp` as the A record host, `temp` as the MX record host, `mx.temp.example.com` as the mail server, and `10` as the MX priority. The mail server A record must be DNS-only when the DNS provider offers HTTP proxying.
+5. Send a test message to `hello@temp.example.com`, then open `hello` in the
+   Web Client Interface.
 
-7. Verify DNS and the public SMTP port:
+The manual external port `25` rule is needed for Internet MX delivery even when
+StartTunnel also publishes port `2500`. An HTTP reverse proxy cannot carry SMTP.
 
-   ```bash
-   dig +short A mx.temp.example.com
-   dig +short MX temp.example.com
-   nc -vz mx.temp.example.com 25
-   ```
+## Mailbox safety
 
-8. Send a test message with `swaks`:
+The Web Client Interface stores sessions, mailbox names, and monitor summaries
+in a private PostgreSQL database. Received mail remains in Inbucket's existing
+storage volume. Backups include received mail, generated client configuration,
+and the private database dump.
 
-   ```bash
-   swaks \
-     --server mx.temp.example.com \
-     --port 25 \
-     --from test@example.com \
-     --to hello@temp.example.com
-   ```
+The client sanitizes HTML, proxies supported inline raster images through its
+authenticated same-origin endpoint, and downloads attachments rather than
+embedding them. Do not rely on the Admin Web Interface as a protected mailbox
+viewer.
 
-   A successful delivery ends with an SMTP response similar to `250 Mail accepted for delivery`.
+## Existing standalone client users
 
-9. Open the **Web Interface**, enter `hello` as the mailbox name, and inspect the received message.
-
-StartOS may automatically publish external port `2500` to internal port `2500`. Keep the manual external port `25` to internal port `2500` rule because Internet MX delivery uses TCP port `25`. The automatic port `2500` mapping does not replace it.
-
-Manual StartTunnel published ports are persistent and should survive Inbucket updates, restarts, and interface reloads. If the port `25` rule disappears, check whether the StartTunnel device was deleted, recreated, or changed from **Server** to **Client**, because those operations remove the device's manual and automatic published ports. Replacing or resetting the StartTunnel database also removes saved rules. Disabling automatic publishing affects automatic mappings only and should not remove a manual rule.
-
-A normal HTTP reverse proxy cannot carry SMTP. Use raw TCP forwarding through StartTunnel or another direct port-forwarding path. Caddy may continue serving HTTP and HTTPS on ports `80` and `443`; it does not need an SMTP reverse-proxy entry.
-
-## Using Inbucket
-
-### Web Interface
-
-Mailboxes are created when mail arrives; there is no account-registration step. The mailbox name is the part before `@`, and `+tag` suffixes are ignored. Anyone who can reach the Web Interface can browse mailbox contents, so enable it only on trusted gateway addresses.
-
-### REST API
-
-Use the **REST API** interface for automated tests and integrations. The upstream API documentation describes listing a mailbox, retrieving message content or source, deleting a message, and purging a mailbox.
-
-### Configure Inbucket action
-
-Run **Configure Inbucket** whenever the recipient domain or storage limits change. Inbucket reloads with the new settings and rejects messages addressed to the previous domain. Existing stored mailboxes are not renamed. Reducing retention or the message limit can delete older stored messages.
-
-### Inbound SMTP
-
-The SMTP interface receives messages; it is independent from the StartOS system SMTP relay used by applications that send mail. Inbucket does not send or forward messages, so there is no outbound SMTP credentials action.
-
-## Limitations
-
-POP3 is not exposed as a StartOS interface. The SMTP listener does not provide STARTTLS in this package. Retention can be set from 15 minutes to 7 days, the per-mailbox message limit can be set from 1 to 10,000, and the Web Interface has no upstream login mechanism.
+The integrated package begins with a clean client database. It cannot silently
+move the standalone `inbucket-client` package's PostgreSQL volume into this
+package. Keep the standalone package and data in place until a tested
+export/import procedure is available. Do not uninstall it based only on this
+upgrade.

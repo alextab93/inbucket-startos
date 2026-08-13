@@ -1,20 +1,19 @@
 import { i18n } from './i18n'
 import { sdk } from './sdk'
-import { smtpPort, webPort } from './utils'
+import { clientHostId, clientPort, smtpPort, webHostId, webPort } from './utils'
 
 export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
-  const webHost = sdk.MultiHost.of(effects, 'web')
+  const webHost = sdk.MultiHost.of(effects, webHostId)
   const webOrigin = await webHost.bindPort(webPort, {
     protocol: 'http',
     preferredExternalPort: webPort,
   })
 
-  const webUi = sdk.createInterface(effects, {
-    name: i18n('Web Interface'),
+  const adminWebUi = sdk.createInterface(effects, {
+    name: 'Admin Web Interface',
     id: 'ui',
-    description: i18n(
-      'Browse disposable mailboxes and inspect received messages',
-    ),
+    description:
+      'Upstream Inbucket webmail, server status, and diagnostics without mailbox authentication',
     type: 'ui',
     masked: false,
     schemeOverride: null,
@@ -32,6 +31,31 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
     schemeOverride: null,
     username: null,
     path: '/api/v1/',
+    query: {},
+  })
+
+  const clientHost = sdk.MultiHost.of(effects, clientHostId)
+  const clientOrigin = await clientHost.bindPort(clientPort, {
+    protocol: 'http',
+    preferredExternalPort: 80,
+    addSsl: {
+      alpn: { specified: ['http/1.1'] },
+      preferredExternalPort: 443,
+      addXForwardedHeaders: true,
+      auth: null,
+    },
+  })
+
+  const client = sdk.createInterface(effects, {
+    name: 'Web Client Interface',
+    id: 'client',
+    description:
+      'Authenticated mailbox reading, monitoring, source viewing, CID images, and attachment downloads',
+    type: 'ui',
+    masked: false,
+    schemeOverride: null,
+    username: null,
+    path: '/',
     query: {},
   })
 
@@ -58,7 +82,8 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
   })
 
   return [
-    await webOrigin.export([webUi, restApi]),
+    await clientOrigin.export([client]),
+    await webOrigin.export([adminWebUi, restApi]),
     await smtpOrigin.export([smtp]),
   ]
 })

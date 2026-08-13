@@ -6,11 +6,13 @@ import { actions } from '../actions'
 import { restoreInit } from '../backups'
 import { requireDomain } from './requireDomain'
 import { seedStore } from './seedStore'
+import { seedClientSecrets } from './seedClientSecrets'
 
 export const init = sdk.setupInit(
   restoreInit,
   versionGraph,
   seedStore,
+  seedClientSecrets,
   setInterfaces,
   setDependencies,
   actions,
