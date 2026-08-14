@@ -1,18 +1,18 @@
 import { IMPOSSIBLE, VersionInfo } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '3.1.1:3',
+  version: '3.1.1:5',
   releaseNotes: {
     en_US:
-      'Adds the authenticated Inbucket client with private PostgreSQL state while retaining the upstream admin interface and inbound SMTP.',
+      'Fixes upgrades from revision 2 and reduces the package size while retaining the authenticated client, upstream admin interface, and inbound SMTP.',
     es_ES:
-      'Añade ajustes de StartOS para la retención de mensajes y el límite de mensajes por buzón.',
+      'Corrige las actualizaciones desde la revisión 2 y reduce el tamaño del paquete conservando el cliente autenticado, la interfaz de administración y el SMTP entrante.',
     de_DE:
-      'Fügt StartOS-Einstellungen für die Nachrichtenaufbewahrung und das Nachrichtenlimit pro Postfach hinzu.',
+      'Behebt Aktualisierungen von Revision 2 und reduziert die Paketgröße, während der authentifizierte Client, die Administrationsoberfläche und eingehendes SMTP erhalten bleiben.',
     pl_PL:
-      'Dodaje ustawienia StartOS dotyczące czasu przechowywania wiadomości i limitu wiadomości na skrzynkę.',
+      'Naprawia aktualizacje z wersji 2 i zmniejsza rozmiar pakietu, zachowując uwierzytelnionego klienta, interfejs administracyjny i przychodzący SMTP.',
     fr_FR:
-      'Ajoute des réglages StartOS pour la durée de conservation et la limite de messages par boîte.',
+      'Corrige les mises à niveau depuis la révision 2 et réduit la taille du paquet tout en conservant le client authentifié, l’interface d’administration et le SMTP entrant.',
   },
   migrations: {
     up: async ({ effects }) => {},

@@ -43,7 +43,7 @@ subcontainers.
 
 ## Upstream provenance
 
-StartOS package version `3.1.1:3` retains the official multi-architecture
+StartOS package version `3.1.1:5` retains the official multi-architecture
 Inbucket image. The image is not rebuilt from the submodule.
 
 | Component | Immutable source |

@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS frontend
+FROM node:22-alpine AS frontend
 
 WORKDIR /build
 
@@ -9,20 +9,35 @@ COPY frontend ./frontend
 COPY vite.config.mjs ./
 RUN npm run build:frontend
 
-FROM ruby:3.4.5-slim-bookworm
+FROM ruby:3.4.5-alpine AS gems
 
 WORKDIR /app
 
-RUN apt-get update -qq && apt-get install --no-install-recommends -y \
-      build-essential curl libpq-dev libyaml-dev \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache build-base libpq-dev yaml-dev
 
 COPY Gemfile Gemfile.lock ./
 RUN bundle config set without "development test" && \
     bundle install && \
-    rm -rf /usr/local/bundle/cache
+    bundle clean --force && \
+    find /usr/local/bundle -type f \( -name '*.c' -o -name '*.h' -o -name '*.o' -o -name '*.a' \) -delete && \
+    find /usr/local/bundle -type f -name '*.so' -exec strip --strip-unneeded {} + && \
+    rm -rf /usr/local/bundle/gems/*/test /usr/local/bundle/gems/*/spec && \
+    rm -rf /usr/local/bundle/cache /usr/local/bundle/doc
 
-COPY . .
+FROM ruby:3.4.5-alpine
+
+WORKDIR /app
+
+RUN apk add --no-cache libpq libstdc++ tzdata
+
+COPY --from=gems /usr/local/bundle /usr/local/bundle
+COPY Gemfile Gemfile.lock ./
+COPY app ./app
+COPY bin ./bin
+COPY config ./config
+COPY db ./db
+COPY config.ru Rakefile ./
+
 COPY --from=frontend /build/public ./public
 RUN chmod +x bin/rails bin/rake
 

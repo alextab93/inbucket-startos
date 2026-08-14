@@ -4,6 +4,7 @@
 node_modules
 javascript
 public
+upstream-project
 *.s9pk
 log/*
 tmp/*

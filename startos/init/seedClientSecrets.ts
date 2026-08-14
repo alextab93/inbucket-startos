@@ -3,7 +3,7 @@ import { storeJson } from '../fileModels/store.json'
 import { sdk } from '../sdk'
 
 export const seedClientSecrets = sdk.setupOnInit(async (effects) => {
-  const current = await storeJson.read().const(effects)
+  const current = await storeJson.read().once()
   if (
     current?.databasePassword &&
     current.secretKeyBase &&

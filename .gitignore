@@ -8,3 +8,5 @@ docker-images
 javascript
 ncc-cache
 /public/
+/log/
+/tmp/
