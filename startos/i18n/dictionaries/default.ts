@@ -34,10 +34,10 @@ const dict = {
   'Messages per Mailbox': 30,
   'Older messages are deleted when this limit is exceeded.': 31,
   'Configure Inbucket': 32,
-  'Choose the recipient domain, message retention period, and per-mailbox message limit.': 33,
-  'Messages addressed to any other domain will be rejected. Changing the domain does not rename existing mailboxes. Reducing retention or the message limit can delete older stored messages.': 34,
+  'Choose the recipient domain, message retention period, per-mailbox message limit, and maximum SMTP message size.': 33,
+  'Messages addressed to any other domain will be rejected. Changing the domain does not rename existing mailboxes. Reducing retention or a storage limit can delete or reject messages.': 34,
   'Configuration Saved': 35,
-  'Inbucket is restarting with the configured domain and storage limits. DNS and public TCP forwarding must be configured separately.': 36,
+  'Inbucket is restarting with the configured domain, storage limits, and maximum SMTP message size. DNS and public TCP forwarding must be configured separately.': 36,
   'Configure the disposable mail domain before starting Inbucket.': 37,
   'Set Admin Password': 38,
   'Generate the password for the Inbucket Client, the authenticated mailbox reader.': 39,
@@ -47,6 +47,8 @@ const dict = {
   Username: 43,
   Password: 44,
   'Set the Inbucket Client password before starting Inbucket.': 45,
+  'Maximum Message Size': 46,
+  'Maximum accepted SMTP message size in MiB, including headers and MIME encoding.': 47,
 } as const
 
 /**

@@ -68,7 +68,7 @@ One model, holding StartOS-side state. Upstream Inbucket has no configuration fi
 | ------------ | ----------------- | ----------------------------------------- | --------------- |
 | `store.json` | `main:store.json` | At install, and by **Set Admin Password** | By both actions |
 
-It carries two unrelated things. The first is the settings the user chose — accepted domain, retention period, per-mailbox message cap — which are read at start and turned into `INBUCKET_*` variables. Changing any of them requires a restart to take effect, and the service reads them fresh each time, so an edit made here always wins.
+It carries two unrelated things. The first is the settings the user chose: accepted domain, retention period, per-mailbox message cap, and maximum SMTP message size. These are read at start and turned into `INBUCKET_*` variables. Changing any of them requires a restart to take effect, and the service reads them fresh each time, so an edit made here always wins.
 
 The second is the client's own secrets: its PostgreSQL password and Rails signing key, seeded once at install and never regenerated — a restore keeps the ones that came with the backup, which is what lets the restored database still be read. The client's password sits alongside them but is minted only by **Set Admin Password**; init never generates one.
 
@@ -105,12 +105,12 @@ Two actions, both user-facing.
 
 ### Configure Inbucket
 
-- **When to run it** — first at install, prompted by the task; afterwards to change the accepted domain or the storage limits.
+- **When to run it:** First at install, prompted by the task; afterwards to change the accepted domain, storage limits, or maximum SMTP message size.
 - **What the domain is** — a literal match against the recipient address, nothing more. It is never resolved, and the package never verifies ownership, so a reserved name like `mailbox.test` is a perfectly valid answer for someone only feeding Inbucket from their own applications. A domain the user owns is needed only to receive mail from the internet, which additionally needs the port-25 forward under [Limitations](#limitations-and-differences).
-- **What it changes** — the domain, retention period, and per-mailbox cap in `store.json`. The form is pre-filled with what is already saved.
+- **What it changes:** The domain, retention period, per-mailbox cap, and maximum SMTP message size in `store.json`. The form is pre-filled with what is already saved. The message-size limit accepts 1 to 100 MiB and defaults to 50 MiB.
 - **Cost** — instant to save. The new values reach Inbucket on its next start.
 - **Repeat safety** — idempotent.
-- **What happens next** — restart to apply. Changing the domain does not rename existing mailboxes, and mail for the old domain stops being accepted. Lowering retention or the message cap deletes stored messages that no longer fit.
+- **What happens next:** Restart to apply. Changing the domain does not rename existing mailboxes, and mail for the old domain stops being accepted. Lowering retention or the message cap deletes stored messages that no longer fit. Lowering the SMTP message-size limit rejects future messages above that limit.
 - **Outputs** — none.
 
 ### Set Admin Password
@@ -190,6 +190,7 @@ startos_managed_env_vars:
   - INBUCKET_SMTP_DEFAULTSTORE
   - INBUCKET_SMTP_STOREDOMAINS
   - INBUCKET_SMTP_TIMEOUT
+  - INBUCKET_SMTP_MAXMESSAGEBYTES
   - INBUCKET_WEB_ADDR
   - INBUCKET_POP3_ADDR
   - INBUCKET_STORAGE_TYPE
