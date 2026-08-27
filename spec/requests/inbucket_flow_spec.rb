@@ -11,7 +11,8 @@ RSpec.describe "Inbucket flow", type: :request do
         from: "sender@example.com",
         subject: "Hello",
         date: "2026-08-11T12:00:00Z",
-        size: 512
+        size: 512,
+        seen: false
       }
     ]
   end
@@ -42,15 +43,109 @@ RSpec.describe "Inbucket flow", type: :request do
     expect(response.parsed_body).to eq("error" => "unauthorized")
   end
 
-  it "returns mailbox contents" do
+  it "maps an unseen upstream message to unread mailbox contents" do
     authenticate
     stub_json("/api/v1/mailbox/#{mailbox}", messages)
 
     get "/v1/inbucket/mailbox", params: { name: mailbox }
 
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body).to eq(JSON.parse(messages.to_json))
+    expect(response.parsed_body).to eq(JSON.parse(messages.to_json).map { |item| item.merge("read" => false) })
     expect(response.headers["Cache-Control"]).to eq("private, no-store")
+  end
+
+  it "maps a seen upstream message to read mailbox contents" do
+    authenticate
+    stub_json("/api/v1/mailbox/#{mailbox}", [{ **messages.first, seen: true }])
+
+    get "/v1/inbucket/mailboxes/#{mailbox}"
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.first).to include("seen" => true, "read" => true)
+  end
+
+  it "does not infer read state from a missing upstream seen value" do
+    authenticate
+    stub_json("/api/v1/mailbox/#{mailbox}", [messages.first.except(:seen)])
+
+    get "/v1/inbucket/mailboxes/#{mailbox}"
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.first).to include("read" => false)
+  end
+
+  it "does not infer read state from a malformed upstream seen value" do
+    authenticate
+    stub_json("/api/v1/mailbox/#{mailbox}", [{ **messages.first, seen: "true" }])
+
+    get "/v1/inbucket/mailboxes/#{mailbox}"
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.first).to include("seen" => "true", "read" => false)
+  end
+
+  it "marks a message seen through the upstream API" do
+    authenticate
+    stub_request(:patch, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}/#{message_id}")
+      .with(
+        body: '{"seen":true}',
+        headers: { "Accept" => "application/json", "Content-Type" => "application/json" }
+      )
+      .to_return(status: 204, body: "")
+
+    patch "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}/read"
+
+    expect(response).to have_http_status(:no_content)
+  end
+
+  it "escapes mailbox and message identifiers when marking a message seen" do
+    authenticate
+    stub_request(:patch, "http://inbucket.test:9000/api/v1/mailbox/candidate%2Balerts/message%2B1")
+      .with(
+        body: '{"seen":true}',
+        headers: { "Accept" => "application/json", "Content-Type" => "application/json" }
+      )
+      .to_return(status: 204, body: "")
+
+    patch "/v1/inbucket/mailboxes/candidate%2Balerts/messages/message%2B1/read"
+
+    expect(response).to have_http_status(:no_content)
+  end
+
+  it "marks a message read idempotently" do
+    authenticate
+    stub_request(:patch, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}/#{message_id}")
+      .with(body: '{"seen":true}')
+      .to_return(status: 204, body: "")
+
+    2.times do
+      patch "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}/read"
+      expect(response).to have_http_status(:no_content)
+    end
+  end
+
+  it "returns not found when marking a missing message read" do
+    authenticate
+    stub_request(:patch, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}/missing")
+      .with(body: '{"seen":true}')
+      .to_return(status: 404, body: "not found")
+
+    patch "/v1/inbucket/mailboxes/#{mailbox}/messages/missing/read"
+
+    expect(response).to have_http_status(:not_found)
+    expect(response.parsed_body).to eq("error" => "not_found")
+  end
+
+  it "does not report read success when upstream rejects the change" do
+    authenticate
+    stub_request(:patch, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}/#{message_id}")
+      .with(body: '{"seen":true}')
+      .to_return(status: 500, body: "failed")
+
+    patch "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}/read"
+
+    expect(response).to have_http_status(:bad_gateway)
+    expect(response.parsed_body).to eq("error" => "inbucket_error")
   end
 
   it "saves a mailbox after it is confirmed to contain messages" do
@@ -289,17 +384,20 @@ RSpec.describe "Inbucket flow", type: :request do
 
   it "deletes a message" do
     authenticate
+    MonitorMessage.record(monitor_header)
     stub_request(:delete, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}/#{message_id}")
       .to_return(status: 200, body: '"OK"', headers: { "Content-Type" => "application/json" })
 
     delete "/v1/inbucket/message", params: { name: mailbox, id: message_id }
 
     expect(response).to have_http_status(:no_content)
+    expect(MonitorMessage.find_by(mailbox:, message_id:)).to be_nil
   end
 
   it "purges a mailbox and removes it from saved mailboxes" do
     authenticate
     Mailbox.record(mailbox)
+    MonitorMessage.record(monitor_header)
     stub_request(:delete, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}")
       .to_return(status: 200, body: '"OK"', headers: { "Content-Type" => "application/json" })
 
@@ -307,6 +405,7 @@ RSpec.describe "Inbucket flow", type: :request do
 
     expect(response).to have_http_status(:no_content)
     expect(Mailbox.find_by(name: mailbox)).to be_nil
+    expect(MonitorMessage.find_by(mailbox:)).to be_nil
   end
 
   it "returns not found when Inbucket cannot find a message" do
@@ -336,6 +435,7 @@ RSpec.describe "Inbucket flow", type: :request do
          params: { username: user.username, password: "correct horse battery staple" }.to_json,
          headers: json_headers
     expect(response).to have_http_status(:ok)
+    user
   end
 
   def json_headers

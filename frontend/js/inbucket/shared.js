@@ -43,6 +43,7 @@ export const mailboxPath = (mailbox) => `/v1/inbucket/mailbox?name=${encodeURICo
 export const archiveMailboxPath = (mailbox) => `/v1/inbucket/mailbox/archive?name=${encodeURIComponent(mailbox)}`
 export const restoreMailboxPath = (mailbox) => `${archiveMailboxPath(mailbox)}&archived=false`
 export const messagePath = (mailbox, id, suffix = '') => `/v1/inbucket/mailboxes/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(id)}${suffix}`
+export const readMessagePath = (mailbox, id) => messagePath(mailbox, id, '/read')
 export const inlineImagePath = (mailbox, id, cid) => `${messagePath(mailbox, id, '/inline-image')}?cid=${encodeURIComponent(cid)}`
 export const attachmentsPath = (mailbox, id) => messagePath(mailbox, id, '/attachments')
 export const attachmentPath = (mailbox, id, index) => `${attachmentsPath(mailbox, id)}/${encodeURIComponent(index)}`

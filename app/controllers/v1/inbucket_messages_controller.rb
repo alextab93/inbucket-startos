@@ -8,6 +8,10 @@ module V1
       render_upstream(inbucket.message(params.require(:name), params.require(:id)), json: true)
     end
 
+    def mark_read
+      render_destroy_upstream(inbucket.mark_seen(params.require(:name), params.require(:id)))
+    end
+
     def source
       response = inbucket.source(params.require(:name), params.require(:id))
       return render_upstream(response) unless response.status.between?(200, 299)
@@ -53,7 +57,9 @@ module V1
       name = params.require(:name)
       id = params.require(:id)
       upstream = inbucket.delete_message(name, id)
-      MonitorMessage.where(mailbox: name, message_id: id).destroy_all if upstream.status.between?(200, 299)
+      if upstream.status.between?(200, 299)
+        MonitorMessage.where(mailbox: name, message_id: id).destroy_all
+      end
       render_destroy_upstream(upstream)
     end
 

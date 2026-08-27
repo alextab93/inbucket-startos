@@ -46,7 +46,7 @@ All three build for `x86_64` and `aarch64`.
 
 The `client` image is not a wrapper around anything upstream — it is a Rails API and a Vite-built browser frontend written for this package, backed by its own PostgreSQL. It exists because upstream Inbucket's webmail deliberately has no authentication: anyone who can reach it can read every mailbox. The client puts a login in front of the same data, which it reads through upstream's REST API and monitor websocket over loopback.
 
-Three subcontainers run: `inbucket` (upstream), `client-postgres`, and `client-app`. The last hosts three processes — the Puma web server, the monitor, and the two setup oneshots — in one subcontainer, so they share a filesystem. Attach with `start-cli package attach inbucket -n client-app`.
+Three subcontainers run: `inbucket` (upstream), `client-postgres`, and `client-app`. The last hosts the Puma web server, the monitor, and two setup oneshots in one subcontainer, so they share a filesystem. Attach with `start-cli package attach inbucket -n client-app`.
 
 ## Volume and Data Layout
 
@@ -54,7 +54,7 @@ Two volumes: received mail on one, the client's own state on the other.
 
 | Volume            | Mount point                | Contents                                                             |
 | ----------------- | -------------------------- | -------------------------------------------------------------------- |
-| `main`            | `/config`, `/storage`      | Upstream's config directory and the message store                    |
+| `main`            | `/config`, `/storage`      | Upstream's config, messages, indexes, and shared `seen` state        |
 | `main`            | not mounted                | `store.json`, at the volume root                                     |
 | `client-postgres` | `/var/lib/postgresql/data` | The client's users, sessions, mailbox catalog, and monitor summaries |
 
@@ -155,7 +155,7 @@ The strategy is mixed. `main` — every received message and upstream's config �
 
 Nothing is deliberately excluded. A restored instance needs nothing re-entered: the domain and storage settings come back in `store.json`, the client's account and saved mailbox catalog come back in the dump, and the credentials that worked before the backup still work.
 
-The monitor's summaries of past deliveries are in the dump too, but they are only a convenience view — the messages themselves are on `main` and are what actually matters.
+The monitor's summaries of past deliveries are in the database dump. Message headers, including Inbucket's shared `seen` state, are stored with the messages on `main`, so backup and restore preserve the same read indicator across the Rails client and other interfaces using the upstream API.
 
 ## Limitations and Differences
 
