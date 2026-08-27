@@ -1,5 +1,6 @@
 import { storeJson } from './fileModels/store.json'
 import { i18n } from './i18n'
+import { inbucketEnvironment } from './inbucketEnvironment'
 import { sdk } from './sdk'
 import {
   clientPort,
@@ -77,22 +78,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
       subcontainer: inbucketSubcontainer,
       exec: {
         command: sdk.useEntrypoint(),
-        env: {
-          INBUCKET_MAILBOXNAMING: 'local',
-          INBUCKET_SMTP_ADDR: `0.0.0.0:${smtpPort}`,
-          INBUCKET_SMTP_DOMAIN: config.domain,
-          INBUCKET_SMTP_DEFAULTACCEPT: 'false',
-          INBUCKET_SMTP_ACCEPTDOMAINS: config.domain,
-          INBUCKET_SMTP_DEFAULTSTORE: 'false',
-          INBUCKET_SMTP_STOREDOMAINS: config.domain,
-          INBUCKET_SMTP_TIMEOUT: '30s',
-          INBUCKET_WEB_ADDR: `0.0.0.0:${webPort}`,
-          INBUCKET_POP3_ADDR: `127.0.0.1:${pop3Port}`,
-          INBUCKET_STORAGE_TYPE: 'file',
-          INBUCKET_STORAGE_PARAMS: 'path:/storage',
-          INBUCKET_STORAGE_RETENTIONPERIOD: config.retentionPeriod,
-          INBUCKET_STORAGE_MAILBOXMSGCAP: String(config.mailboxMessageCap),
-        },
+        env: inbucketEnvironment(config, {
+          smtp: smtpPort,
+          web: webPort,
+          pop3: pop3Port,
+        }),
       },
       ready: {
         display: 'Admin Web Interface',
