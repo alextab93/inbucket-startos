@@ -68,7 +68,7 @@ Sign in, then type a mailbox name to open it — the mailbox does not have to ex
 
 The **Monitor** tab shows deliveries as they arrive across every mailbox, which is the quickest way to catch a message you are waiting on.
 
-Opening a message shows the sanitized HTML body, or the plain text if there is none. Remote images are blocked; images the message carries with it are shown. **View source** shows the raw message, and attachments download rather than open in the browser.
+Opening a message shows the sanitized HTML body with its supported layout and styles, or the plain text if there is no HTML body. Remote images are blocked by default. Use **Load remote images** when you trust the sender and want to retrieve them. Images carried inside the message are shown without that approval. **View source** shows the raw message, and attachments download rather than open in the browser.
 
 ### Actions
 

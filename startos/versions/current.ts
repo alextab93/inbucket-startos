@@ -1,21 +1,21 @@
 import { IMPOSSIBLE, VersionInfo } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '3.1.1:6',
+  version: '3.1.1:9',
   releaseNotes: {
     en_US:
-      'Adds a configurable maximum SMTP message size from 1 to 100 MiB, with a 50 MiB default for existing installations.',
+      'Improves received-email rendering with isolated, sanitized HTML and CSS, preserves complex sender layouts, blocks remote tracking resources by default, and loads remote images only after explicit approval.',
     es_ES:
-      'Añade un tamaño máximo configurable para los mensajes SMTP de 1 a 100 MiB, con un valor predeterminado de 50 MiB para las instalaciones existentes.',
+      'Mejora la visualización del correo recibido con HTML y CSS aislados y sanitizados, conserva diseños complejos del remitente, bloquea por defecto los recursos remotos de seguimiento y carga imágenes remotas solo tras una aprobación explícita.',
     de_DE:
-      'Fügt eine konfigurierbare maximale SMTP-Nachrichtengröße von 1 bis 100 MiB hinzu, mit einem Standardwert von 50 MiB für bestehende Installationen.',
+      'Verbessert die Darstellung empfangener E-Mails mit isoliertem, bereinigtem HTML und CSS, erhält komplexe Absenderlayouts, blockiert externe Tracking-Ressourcen standardmäßig und lädt externe Bilder nur nach ausdrücklicher Zustimmung.',
     pl_PL:
-      'Dodaje konfigurowalny maksymalny rozmiar wiadomości SMTP od 1 do 100 MiB, z wartością domyślną 50 MiB dla istniejących instalacji.',
+      'Ulepsza wyświetlanie odebranych wiadomości dzięki izolowanemu i oczyszczonemu HTML oraz CSS, zachowuje złożone układy nadawców, domyślnie blokuje zdalne zasoby śledzące i ładuje obrazy zdalne dopiero po wyraźnej zgodzie.',
     fr_FR:
-      'Ajoute une taille maximale configurable de 1 à 100 Mio pour les messages SMTP, avec une valeur par défaut de 50 Mio pour les installations existantes.',
+      'Améliore l’affichage des courriels reçus avec du HTML et du CSS isolés et assainis, conserve les mises en page complexes des expéditeurs, bloque par défaut les ressources de suivi distantes et ne charge les images distantes qu’après autorisation explicite.',
   },
   migrations: {
-    up: async () => {},
+    up: async ({ effects }) => {},
     down: IMPOSSIBLE,
   },
 })

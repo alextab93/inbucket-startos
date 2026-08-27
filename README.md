@@ -163,7 +163,7 @@ The monitor's summaries of past deliveries are in the dump too, but they are onl
 2. **The SMTP listener has no TLS**, so mail arrives in the clear. It is a receiver for testing and disposable addresses.
 3. **POP3 is bound to loopback and not exported.** Upstream serves it; here it is unreachable.
 4. **Only one domain is accepted at a time.** Upstream can accept several; the package's action takes one.
-5. **The client renders HTML mail only after sanitizing it**, with a strict same-origin content policy. Remote images do not load, `cid:` images are proxied through an authenticated endpoint and only common raster formats are returned, and attachments download rather than display — PDF and SVG included.
+5. **The client renders HTML mail only after sanitizing it** inside an isolated frame. Sender CSS and complex table layouts are preserved. Remote images are blocked by default and load only after explicit approval. `cid:` images are proxied through an authenticated endpoint, only common raster formats are returned, and attachments download instead of displaying inline, including PDF and SVG files.
 6. **Reaching Inbucket from the internet needs an external port 25 forward.** StartOS publishes the SMTP interface on 2500 and cannot map 25 for you.
 
 ## Quick Reference for AI Consumers

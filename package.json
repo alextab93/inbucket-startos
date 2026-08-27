@@ -1,14 +1,20 @@
 {
   "name": "inbucket-startos",
   "scripts": {
-    "build": "rm -rf ./javascript && ncc build startos/index.ts -o ./javascript",
+    "build": "npm run build:startos && npm run build:frontend",
+    "build:startos": "rm -rf ./javascript && ncc build startos/index.ts -o ./javascript",
     "build:frontend": "vite build",
     "prettier": "prettier --write startos",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test:startos": "node --import tsx --test test/startos/*.test.ts",
+    "test:frontend": "vitest run",
+    "test": "npm run test:startos && npm run test:frontend"
   },
   "dependencies": {
     "@start9labs/start-sdk": "2.0.9",
-    "dompurify": "^3.4.13"
+    "lettersanitizer": "^1.0.8",
+    "linkify-element": "^4.3.3",
+    "linkifyjs": "^4.3.3"
   },
   "overrides": {
     "@start9labs/start-sdk": "$@start9labs/start-sdk"
@@ -16,9 +22,12 @@
   "devDependencies": {
     "@types/node": "^22.19.0",
     "@vercel/ncc": "^0.38.4",
+    "jsdom": "^26.1.0",
     "prettier": "^3.6.2",
+    "tsx": "^4.23.12",
+    "typescript": "^6.0.3",
     "vite": "^8.2.1",
-    "typescript": "^6.0.3"
+    "vitest": "^4.1.11"
   },
   "prettier": {
     "trailingComma": "all",

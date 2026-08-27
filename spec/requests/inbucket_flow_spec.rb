@@ -176,6 +176,33 @@ RSpec.describe "Inbucket flow", type: :request do
     expect(response.body).to eq("hello")
   end
 
+  it "matches a URL-encoded content ID without case sensitivity" do
+    authenticate
+    source = <<~MESSAGE
+      Content-Type: multipart/related; boundary="part"
+
+      --part
+      Content-Type: text/html
+
+      <img src="cid:Logo One.PNG">
+      --part
+      Content-Type: image/png
+      Content-ID: <Logo One.PNG>
+      Content-Transfer-Encoding: base64
+
+      aGVsbG8=
+      --part--
+    MESSAGE
+    stub_request(:get, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}/#{message_id}/source")
+      .to_return(status: 200, body: source, headers: { "Content-Type" => "text/plain" })
+
+    get "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}/inline-image?cid=logo%20one.png"
+
+    expect(response).to have_http_status(:ok)
+    expect(response.media_type).to eq("image/png")
+    expect(response.body).to eq("hello")
+  end
+
   it "does not expose a non-image content ID" do
     authenticate
     source = <<~MESSAGE
@@ -196,6 +223,30 @@ RSpec.describe "Inbucket flow", type: :request do
       .to_return(status: 200, body: source, headers: { "Content-Type" => "text/plain" })
 
     get "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}/inline-image", params: { cid: "document" }
+
+    expect(response).to have_http_status(:not_found)
+  end
+
+  it "does not expose an SVG content ID" do
+    authenticate
+    source = <<~MESSAGE
+      Content-Type: multipart/related; boundary="part"
+
+      --part
+      Content-Type: text/html
+
+      <img src="cid:vector">
+      --part
+      Content-Type: image/svg+xml
+      Content-ID: <vector>
+
+      <svg xmlns="http://www.w3.org/2000/svg"><script>alert('unsafe')</script></svg>
+      --part--
+    MESSAGE
+    stub_request(:get, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}/#{message_id}/source")
+      .to_return(status: 200, body: source, headers: { "Content-Type" => "text/plain" })
+
+    get "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}/inline-image", params: { cid: "vector" }
 
     expect(response).to have_http_status(:not_found)
   end
