@@ -419,12 +419,27 @@
 }
 
 .message-body {
-  padding-block:28px;
-  overflow-wrap:anywhere
+  padding-block:28px
 }
 
-.message-body img {
-  height:auto
+.message-body iframe {
+  display:block;
+  width:100%;
+  min-height:240px;
+  border:0;
+  background:#fff
+}
+
+.message-remote-content {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:var(--wash)
 }
 
 .message-attachments {
@@ -458,7 +473,7 @@
   font-size:.86rem
 }
 
-.message-body pre,.message-source {
+.message-source {
   margin:0;
   white-space:pre-wrap;
   overflow-wrap:anywhere;

@@ -3,6 +3,7 @@ Rails.application.routes.draw do
 
   namespace :v1 do
     resource :session, only: %i[show create destroy]
+    get "email-frame" => "email_frames#show"
     get "inbucket/mailboxes" => "inbucket_mailboxes#index"
     get "inbucket/monitor/messages" => "inbucket_monitor_messages#index"
     get "inbucket/mailbox" => "inbucket_mailboxes#show"
