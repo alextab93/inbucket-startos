@@ -1,4 +1,5 @@
 import { nodes } from './inbucket/dom'
+import { configureMailboxTools } from './inbucket/mailbox-tools'
 import { archiveSelectedMailboxes, clearMailboxes, configureMailboxes, deleteSelectedMailboxes, loadMailboxes, refreshMailboxCatalog, selectAllMailboxes } from './inbucket/mailboxes'
 import { configureMessages, deleteMessage, toggleSource } from './inbucket/messages'
 import { configureMonitor, refreshMonitorMessages } from './inbucket/monitor'
@@ -7,6 +8,7 @@ import { request, setStatus, updateLocation } from './inbucket/shared'
 
 const showAccessScreen = (message, stateName = 'signed-out') => {
   nodes.mailboxView.hidden = true
+  nodes.appNavigation.hidden = true
   nodes.signOut.hidden = true
   nodes.accessScreen.hidden = false
   nodes.loginForm.hidden = false
@@ -16,6 +18,7 @@ const showAccessScreen = (message, stateName = 'signed-out') => {
 const showMailboxView = () => {
   nodes.accessScreen.hidden = true
   nodes.mailboxView.hidden = false
+  nodes.appNavigation.hidden = false
   nodes.signOut.hidden = false
 }
 
@@ -33,9 +36,10 @@ const showView = (view) => {
   nodes.monitorView.hidden = view !== 'monitor'
   nodes.archiveView.hidden = view !== 'archive'
   nodes.mailboxesView.hidden = view !== 'mailboxes'
-  nodes.monitorTab.setAttribute('aria-selected', view === 'monitor' ? 'true' : 'false')
-  nodes.archiveTab.setAttribute('aria-selected', view === 'archive' ? 'true' : 'false')
-  nodes.mailboxesTab.setAttribute('aria-selected', view === 'mailboxes' ? 'true' : 'false')
+  for (const [name, tab] of [['monitor', nodes.monitorTab], ['archive', nodes.archiveTab], ['mailboxes', nodes.mailboxesTab]]) {
+    if (view === name) tab.setAttribute('aria-current', 'page')
+    else tab.removeAttribute('aria-current')
+  }
   if (view === 'monitor') refreshMonitorMessages()
   if (view === 'archive') refreshMailboxCatalog()
 }
@@ -97,6 +101,7 @@ const signOut = async () => {
 }
 
 configureMailboxes({ handleUnauthorized })
+configureMailboxTools()
 configureMessages({ loadMailboxes, handleUnauthorized })
 configureMonitor({ handleUnauthorized, showView })
 
@@ -105,6 +110,7 @@ nodes.mailboxForm.addEventListener('submit', (event) => {
   const mailbox = nodes.mailboxName.value.trim()
   if (!mailbox) return
   nodes.mailboxName.value = ''
+  nodes.mailboxForm.closest('details').removeAttribute('open')
   state.selectedMailboxes.add(mailbox)
   loadMailboxes()
 })

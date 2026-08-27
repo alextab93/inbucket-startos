@@ -4,15 +4,15 @@ export const current = VersionInfo.of({
   version: '3.1.1:10',
   releaseNotes: {
     en_US:
-      'Tracks read messages in the private mailbox client and makes unread messages visually distinct while preserving a separate selected-message state.',
+      'Tracks read messages, distinguishes unread messages from the current selection, and adds a compact mailbox workspace with independently scrolling message and reader panes.',
     es_ES:
-      'Registra los mensajes leídos en el cliente privado y distingue visualmente los mensajes no leídos sin confundirlos con el mensaje seleccionado.',
+      'Registra los mensajes leídos, distingue los no leídos de la selección actual y añade un espacio de correo compacto con desplazamiento independiente para la lista y el lector.',
     de_DE:
-      'Speichert gelesene Nachrichten im privaten Postfach und kennzeichnet ungelesene Nachrichten deutlich, unabhängig von der ausgewählten Nachricht.',
+      'Speichert gelesene Nachrichten, unterscheidet ungelesene Nachrichten von der aktuellen Auswahl und ergänzt eine kompakte Postfachansicht mit getrennt scrollbaren Bereichen.',
     pl_PL:
-      'Zapisuje stan przeczytania wiadomości w prywatnym kliencie i wyraźnie odróżnia wiadomości nieprzeczytane od aktualnie wybranej wiadomości.',
+      'Zapisuje stan przeczytania, odróżnia nieprzeczytane wiadomości od bieżącego wyboru i dodaje zwarty widok skrzynki z niezależnie przewijanymi panelami.',
     fr_FR:
-      'Enregistre les messages lus dans le client privé et distingue clairement les messages non lus du message actuellement sélectionné.',
+      'Enregistre les messages lus, distingue les messages non lus de la sélection actuelle et ajoute un espace compact avec défilement indépendant de la liste et du lecteur.',
   },
   migrations: {
     up: async ({ effects }) => {},
