@@ -8,18 +8,18 @@ const inputSpec = InputSpec.of({
   domain: Value.text({
     name: i18n('Disposable Mail Domain'),
     description: i18n(
-      'Inbucket accepts and stores messages only for this domain. Configure its MX record separately.',
+      'Inbucket accepts mail addressed to this domain and rejects everything else. It is a filter, not a claim of ownership — nothing here is looked up in DNS. Use a name you own if you want mail from the internet; otherwise any reserved name will do, such as mailbox.test.',
     ),
     required: true,
     default: null,
     inputmode: 'url',
-    placeholder: 'temp.example.com',
+    placeholder: 'mailbox.test',
     maxLength: 253,
     patterns: [
       {
         regex: domainRegex.source,
         description: i18n(
-          'Enter a fully qualified domain such as temp.example.com, without a scheme, path, port, or trailing dot.',
+          'Enter a dotted domain such as mailbox.test, without a scheme, path, port, or trailing dot.',
         ),
       },
     ],
@@ -87,7 +87,7 @@ export const configureDomain = sdk.Action.withInput(
       version: '1',
       title: i18n('Configuration Saved'),
       message: i18n(
-        'Inbucket will use the configured domain and storage limits. DNS and public TCP forwarding must be configured separately.',
+        'Inbucket is restarting with the configured domain and storage limits. DNS and public TCP forwarding must be configured separately.',
       ),
       result: null,
     }

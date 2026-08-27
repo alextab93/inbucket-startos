@@ -1,64 +1,82 @@
 # Inbucket
 
-## What you get
+Inbucket accepts mail for one domain, and you choose that domain before it will start. What to enter depends on where the mail will come from — see **Choosing a domain** below. Changing it later leaves the mailboxes already collected under the old name.
 
-- **Web Client Interface** is the normal authenticated mailbox reader.
-- **Admin Web Interface** is upstream Inbucket webmail, status, and diagnostics.
-- **REST API** provides upstream mailbox automation at `/api/v1/`.
-- **Inbound SMTP** receives messages for your configured domain.
+## Documentation
 
-The Admin Web Interface and REST API do not add upstream mailbox authentication.
-Expose them only through trusted StartOS gateway addresses. Use the Web Client
-Interface for normal mailbox access.
+- [Inbucket documentation](https://inbucket.org/) — the upstream site, covering how mailboxes are named, every configuration setting, and what the REST API offers.
 
-## First setup
+## What you get on StartOS
 
-1. Complete **Configure Inbucket** with a fully qualified domain you control,
-   such as `temp.example.com`, then choose retention and mailbox limits.
-2. Wait for **Admin Web Interface**, **Inbound SMTP**, **Client Database**,
-   **Web Client Interface**, and **Client Monitor** to become ready.
-3. Run **Show Login Credentials** and open the **Web Client Interface** with
-   the generated username and password.
-4. Rotate client credentials with **Refresh Login Password** when needed. This
-   signs out current Web Client Interface sessions.
+A mail server that accepts anything addressed to your domain without you creating a mailbox first. Send to `anything@yourdomain`, and `anything` exists — useful for signing up to things you don't want in your real inbox, and for watching what an application actually sends.
 
-## Receiving Internet mail
+Four interfaces come with it:
 
-1. Enable the StartTunnel gateway for **Inbound SMTP** and note its assigned
-   StartOS port, normally `2500`.
-2. In StartTunnel, create a manual published port from external TCP `25` to the
-   Inbucket SMTP port on the StartOS server.
-3. Allow inbound TCP port `25` in any cloud firewall.
-4. Add an A record for the mail host and an MX record for the recipient domain.
-   For `temp.example.com`:
+- **Web Client Interface** — a mailbox reader with a username and password. This is the one to use.
+- **Admin Web Interface** — Inbucket's own webmail and server diagnostics.
+- **REST API** — Inbucket's mailbox API, for scripts.
+- **Inbound SMTP** — where mail arrives.
+
+**The Admin Web Interface and the REST API have no password.** Anyone who can open them can read and delete every message. Keep them on addresses only you can reach, and use the Web Client Interface for everyday reading.
+
+## Choosing a domain
+
+The domain is a filter on the recipient address, not a claim of ownership. Inbucket accepts anything addressed to `<anything>@<your domain>` and rejects the rest. Nothing you enter is looked up in DNS, and Inbucket never checks whether the domain is real or yours.
+
+So there are two ways to use it, and they want different answers:
+
+**Mail from your own software, on your own network.** Point your application's SMTP settings at Inbucket and have it send to your chosen domain — a signup email to `signup@mailbox.test`, say. No DNS, no MX record, and nothing on the public internet. Use a name that can never collide with a real one: anything ending in `.test` is reserved for exactly this and will never be a real domain. `mailbox.test`, `dev.test`, `myapp.test` are all fine.
+
+Don't reach for something like `test.com` or `example.com` — those are real registered domains belonging to other people. Nothing will break here, because Inbucket does not resolve them, but mail your applications send may leak to the real owner if it ever escapes to a real mail server.
+
+**Mail from the internet**, so you can hand a disposable address to a website. Then it must be a domain you actually own and can add DNS records to, and you need the port forwarding in the next section. A subdomain of a domain you already have is the usual choice — `temp.yourdomain.com`.
+
+If you are not sure, start with a `.test` name. Changing it later is one action.
+
+## Getting set up
+
+1. Run **Configure Inbucket**. Enter the domain from above, and choose how long messages are kept and how many each mailbox holds.
+2. Run **Set Admin Password** and save the username and password it gives you — the password is shown once.
+3. Start Inbucket. It will not start until both of the steps above are done, which is why they are the only things you can press at first.
+4. Open the **Web Client Interface** and sign in.
+
+At this point Inbucket works for anything on your own network. To receive mail from the internet, continue below.
+
+## Receiving mail from the internet
+
+Only needed if you picked a domain you own and want real senders to reach it. Skip this if you are only testing your own software.
+
+Mail servers deliver to port 25, and StartOS publishes Inbucket's SMTP interface on port 2500, so you need one manual forward. A normal web reverse proxy cannot do this — SMTP is not HTTP.
+
+1. Enable a gateway for **Inbound SMTP** and note the port it is published on, normally `2500`.
+2. In StartTunnel, add a published port from external TCP `25` to that port.
+3. Open inbound TCP `25` in any cloud firewall in front of the server.
+4. Point DNS at it. For `temp.yourdomain.com`, with your server at `203.0.113.10`:
 
    ```dns
-   mx.temp.example.com.  A      203.0.113.10
-   temp.example.com.     MX 10  mx.temp.example.com.
+   mx.temp.yourdomain.com.  A      203.0.113.10
+   temp.yourdomain.com.     MX 10  mx.temp.yourdomain.com.
    ```
 
-5. Send a test message to `hello@temp.example.com`, then open `hello` in the
-   Web Client Interface.
+5. Send a message to `hello@temp.yourdomain.com`, then open the mailbox `hello` in the Web Client Interface.
 
-The manual external port `25` rule is needed for Internet MX delivery even when
-StartTunnel also publishes port `2500`. An HTTP reverse proxy cannot carry SMTP.
+## Using Inbucket
 
-## Mailbox safety
+### Web client interface
 
-The Web Client Interface stores sessions, mailbox names, and monitor summaries
-in a private PostgreSQL database. Received mail remains in Inbucket's existing
-storage volume. Backups include received mail, generated client configuration,
-and the private database dump.
+Sign in, then type a mailbox name to open it — the mailbox does not have to exist yet. Mailboxes you have opened are saved to a list you can come back to, and you can archive the ones you are done with rather than deleting them.
 
-The client sanitizes HTML, proxies supported inline raster images through its
-authenticated same-origin endpoint, and downloads attachments rather than
-embedding them. Do not rely on the Admin Web Interface as a protected mailbox
-viewer.
+The **Monitor** tab shows deliveries as they arrive across every mailbox, which is the quickest way to catch a message you are waiting on.
 
-## Existing standalone client users
+Opening a message shows the sanitized HTML body, or the plain text if there is none. Remote images are blocked; images the message carries with it are shown. **View source** shows the raw message, and attachments download rather than open in the browser.
 
-The integrated package begins with a clean client database. It cannot silently
-move the standalone `inbucket-client` package's PostgreSQL volume into this
-package. Keep the standalone package and data in place until a tested
-export/import procedure is available. Do not uninstall it based only on this
-upgrade.
+### Actions
+
+- **Configure Inbucket** — changes the accepted domain (see **Choosing a domain**), how long messages are kept, and how many each mailbox holds. The form shows your current settings, and saving restarts Inbucket. Mailboxes collected under a previous domain keep their names and stay readable, but new mail for that domain is rejected, and lowering either limit deletes stored messages that no longer fit.
+- **Set Admin Password** — generates a new password for the Web Client Interface and shows it once. Run it again whenever you want a fresh password or have lost the one you had. Saving restarts Inbucket, and once it is back the old password no longer works and everyone signed in has been signed out.
+
+## Limitations
+
+Inbucket receives mail; it does not send it, and there is no way to reply to a message from here.
+
+Mail arrives over plain SMTP with no encryption in transit, which is normal for a disposable-mail server but worth knowing before you send anything sensitive to it.

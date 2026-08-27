@@ -5,18 +5,18 @@ import { versionGraph } from '../versions'
 import { actions } from '../actions'
 import { restoreInit } from '../backups'
 import { requireDomain } from './requireDomain'
-import { seedStore } from './seedStore'
 import { seedClientSecrets } from './seedClientSecrets'
+import { watchCredentials } from './watchCredentials'
 
 export const init = sdk.setupInit(
   restoreInit,
   versionGraph,
-  seedStore,
   seedClientSecrets,
   setInterfaces,
   setDependencies,
   actions,
   requireDomain,
+  watchCredentials,
 )
 
 export const uninit = sdk.setupUninit(versionGraph)

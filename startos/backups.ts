@@ -17,7 +17,5 @@ export const { createBackup, restoreInit } = sdk.setupBackups(async () =>
       if (!password) throw new Error('Database password is not initialized')
       return password
     },
-  })
-    .addVolume('main')
-    .addVolume('client-config'),
+  }).addVolume('main'),
 )

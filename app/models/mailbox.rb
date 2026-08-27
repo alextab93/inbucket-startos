@@ -6,12 +6,10 @@ class Mailbox < ApplicationRecord
   scope :active, -> { where(archived: false) }
   scope :archived, -> { where(archived: true) }
 
-  def self.record(name, restore: false)
+  def self.record(name)
     normalized_name = name.to_s.strip
     return if normalized_name.empty?
 
-    mailbox = find_or_create_by!(name: normalized_name)
-    mailbox.update!(archived: false) if restore && mailbox.archived?
-    mailbox
+    find_or_create_by!(name: normalized_name)
   end
 end

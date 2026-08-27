@@ -1,68 +1,29 @@
-# Updating Inbucket
+# Updating the upstream version
 
-The package consumes the official multi-architecture image published as
-`inbucket/inbucket`. The active pin is
-`images.main.source.dockerTag` in `startos/manifest/index.ts`; the package
-version is `startos/versions/current.ts`.
+This package pairs the official `inbucket/inbucket` image with a Rails client built from this repository. Only the first has an upstream to track; the client is ours and versions with the package.
 
-## Determine the next upstream release
+## Determining the upstream version
 
-1. Fetch the latest stable GitHub release or tag:
+- **Inbucket** ([inbucket/inbucket](https://github.com/inbucket/inbucket)) — fetch the latest release tag:
 
-   ```sh
-   gh release view -R inbucket/inbucket --json tagName,publishedAt,url
-   git ls-remote --tags --refs https://github.com/inbucket/inbucket.git
-   ```
+  ```sh
+  gh release view -R inbucket/inbucket --json tagName -q .tagName
+  ```
 
-2. Read the upstream changelog and compare configuration keys, the Dockerfile,
-   entrypoint, exposed ports, and declared volumes against the current package.
-3. Confirm the matching Docker Hub tag exists and inspect it through Docker
-   Hub's tag API:
+  The current pin lives in `startos/manifest/index.ts` at `images.main.source.dockerTag`, as `inbucket/inbucket:<version>@sha256:<digest>`.
 
-   ```sh
-   curl -fsSL "https://hub.docker.com/v2/repositories/inbucket/inbucket/tags/<version>" \
-     | jq '{name, digest, images: [.images[] | {architecture, os, digest}]}'
-   ```
+## Applying the bump
 
-4. Require active `linux/amd64` and `linux/arm64` manifests. Record the OCI index
-   digest returned in the top-level `digest` field.
+- Resolve the new multi-architecture digest and set it alongside the tag — the tag alone is mutable, and both `linux/amd64` and `linux/arm64` must be present:
 
-The initial package pins stable upstream release `3.1.1` and OCI index
-`sha256:4a4c4cf553967e1863e4f48c828774786ac9ee73c53b3a3ecef10f66e5a2cdfb`.
-The verified platform digests are:
+  ```sh
+  docker buildx imagetools inspect inbucket/inbucket:<version> --format '{{ .Manifest.Digest }}'
+  ```
 
-- `linux/amd64`: `sha256:d17bdd468e9c4a55d9bb437cb9f68fc9f1d2b695aac81b2f82ed339b298daa73`
-- `linux/arm64`: `sha256:8835093e993ec3604525abbef425e45eb5a522decfae66e67c5977e25dbabeb4`
+- Check upstream's configuration reference for renames among the `INBUCKET_*` variables in `startos/main.ts`. Inbucket takes its whole configuration from the environment, so a renamed variable reverts silently to its default rather than failing.
+- Confirm the REST API paths the Rails client calls are unchanged: `/api/v1/mailbox/…` for reading and deleting, and the `/api/v2/monitor/messages` websocket the monitor subscribes to. A change to either breaks the client without breaking upstream's own interface.
+- After installing, send a message to the configured domain and confirm it appears in both the admin interface and the web client — that exercises the SMTP listener, the storage backend, and the client's API and monitor paths together.
 
-## Apply the update
+## Changing the Rails client
 
-1. Set `images.main.source.dockerTag` to
-   `inbucket/inbucket:<version>@sha256:<index-digest>`.
-2. Update `version` and translated release notes in
-   `startos/versions/current.ts`. Keep editing `current.ts` unless the update
-   genuinely requires a data migration.
-3. Update this file if image paths, configuration, or the verification process
-   changed. Keep version strings out of `README.md` and `instructions.md`.
-4. Run:
-
-   ```sh
-   npm ci
-   npm run prettier
-   npm run check
-   npm run build
-   make
-   ```
-
-5. Install the exact artifacts on x86_64 and aarch64 StartOS systems. Verify
-   initial domain setup, HTTP and SMTP health checks, inbound delivery, domain
-   rejection, restart persistence, one-hour retention, backup, and restore.
-6. Re-query Docker Hub immediately before release and confirm the tag still
-   resolves to the pinned OCI index digest.
-
-## Outbound SMTP decision gate
-
-Before adding StartOS SMTP credentials during any update, inspect the pinned
-upstream source for an actual SMTP client, forwarding, or notification feature.
-The current upstream receiver has none. Do not connect StartOS system SMTP or
-custom relay credentials unless upstream gains a concrete outbound function or
-the package deliberately adds a separately specified forwarding component.
+The client is versioned by the package, not by upstream. Bump the packaging revision after `:` in `startos/versions/current.ts` and rebuild; there is no separate release to track. `bundle exec rspec` covers its request and service specs and needs a real PostgreSQL test database.

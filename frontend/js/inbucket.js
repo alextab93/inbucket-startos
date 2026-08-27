@@ -26,7 +26,7 @@ const handleUnauthorized = () => {
   nodes.messageList.replaceChildren()
   nodes.messageContent.hidden = true
   nodes.messageEmpty.hidden = false
-  showAccessScreen('Your private session has expired. Open a current Inbucket access link to continue.', 'expired')
+  showAccessScreen('Your session has expired. Sign in again to continue.', 'expired')
 }
 
 const showView = (view) => {
