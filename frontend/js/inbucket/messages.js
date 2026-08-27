@@ -10,6 +10,7 @@ import {
   formatValue,
   headerValue,
   messagePath,
+  readMessagePath,
   request,
   setStatus,
   updateLocation,
@@ -18,6 +19,31 @@ import {
 let loadMailboxes = async () => {}
 let handleUnauthorized = () => {}
 let bodyRenderer
+
+const setMessageRead = (mailbox, id) => {
+  const button = [
+    ...nodes.messageList.querySelectorAll('.message-summary'),
+  ].find(
+    (candidate) =>
+      candidate.dataset.mailbox === mailbox &&
+      candidate.dataset.messageId === String(id),
+  )
+  if (!button) return
+  button.classList.remove('unread')
+  button.classList.add('read')
+  button.dataset.read = 'true'
+  button.setAttribute('aria-label', `Read: ${button.dataset.accessibleSummary}`)
+}
+
+const markMessageRead = async (mailbox, id) => {
+  try {
+    const response = await request(readMessagePath(mailbox, id), {
+      method: 'PATCH',
+    })
+    if (response.status === 401) return handleUnauthorized()
+    if (response.ok) setMessageRead(mailbox, id)
+  } catch {}
+}
 
 export const configureMessages = (options) => {
   loadMailboxes = options.loadMailboxes
@@ -123,6 +149,7 @@ export const selectMessage = async (mailbox, id) => {
         'The message',
       ))
     const message = await response.json()
+    void markMessageRead(selectedMailbox, selectedMessageId)
     if (
       state.currentMailbox !== selectedMailbox ||
       state.currentMessageId !== selectedMessageId
@@ -152,12 +179,19 @@ export const renderMessageList = (messages) => {
     button.className = 'message-summary'
     button.dataset.messageId = String(message.id)
     button.dataset.mailbox = message.mailbox
+    button.dataset.read = message.read ? 'true' : 'false'
+    button.classList.add(message.read ? 'read' : 'unread')
     const subject = document.createElement('strong')
     subject.textContent = formatValue(message.subject) || '(No subject)'
     const sender = document.createElement('span')
     sender.textContent = formatValue(message.from) || 'Unknown sender'
     const date = document.createElement('time')
     date.textContent = dateText(message.date)
+    button.dataset.accessibleSummary = `${subject.textContent}, ${sender.textContent}, ${date.textContent}`
+    button.setAttribute(
+      'aria-label',
+      `${message.read ? 'Read' : 'Unread'}: ${button.dataset.accessibleSummary}`,
+    )
     button.append(subject, sender, date)
     button.addEventListener('click', () =>
       selectMessage(message.mailbox, message.id),

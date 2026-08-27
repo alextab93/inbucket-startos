@@ -325,6 +325,7 @@
 }
 
 .message-summary {
+  position:relative;
   display:grid;
   gap:3px;
   width:100%;
@@ -336,6 +337,30 @@
   font:inherit;
   text-align:left;
   cursor:pointer
+}
+
+.message-summary.unread {
+  background:#f8fbff
+}
+
+.message-summary.unread::after {
+  position:absolute;
+  top:24px;
+  right:18px;
+  width:9px;
+  height:9px;
+  border-radius:50%;
+  background:var(--blue);
+  content:""
+}
+
+.message-summary.unread strong {
+  padding-right:18px;
+  font-weight:800
+}
+
+.message-summary.read strong {
+  font-weight:600
 }
 
 .message-summary:hover,.message-summary.selected {

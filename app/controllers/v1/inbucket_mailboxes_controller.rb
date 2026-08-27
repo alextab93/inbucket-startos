@@ -11,8 +11,10 @@ module V1
       name = params.require(:name)
       Mailbox.find_by(name: name)&.update!(archived: false)
       upstream = inbucket.mailbox(name)
-      Mailbox.record(name) if upstream.status.between?(200, 299) && upstream.body.is_a?(Array) && upstream.body.any?
-      render_upstream(upstream, json: true)
+      return render_upstream(upstream, json: true) unless mailbox_response?(upstream)
+
+      Mailbox.record(name) if upstream.body.any?
+      render json: messages_with_read_status(name, upstream.body), status: upstream.status
     end
 
     def destroy
@@ -21,6 +23,7 @@ module V1
       if upstream.status.between?(200, 299)
         Mailbox.where(name: name).destroy_all
         MonitorMessage.where(mailbox: name).destroy_all
+        MessageRead.where(mailbox: name).destroy_all
       end
       render_destroy_upstream(upstream)
     end
@@ -32,6 +35,18 @@ module V1
     end
 
     private
+
+    def mailbox_response?(response)
+      response.status.between?(200, 299) && response.body.is_a?(Array)
+    end
+
+    def messages_with_read_status(mailbox, messages)
+      read_ids = MessageRead.where(user: current_user_session.user, mailbox:).pluck(:message_id).index_with(true)
+      messages.map do |message|
+        id = message["id"] || message[:id]
+        message.merge("read" => read_ids.key?(id.to_s))
+      end
+    end
 
     def archived_mailbox(mailbox)
       response = inbucket.mailbox(mailbox.name)

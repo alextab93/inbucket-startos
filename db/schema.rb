@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_08_13_030000) do
+ActiveRecord::Schema[8.0].define(version: 2026_08_27_220000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -21,6 +21,17 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_13_030000) do
     t.boolean "archived", default: false, null: false
     t.index ["archived"], name: "index_mailboxes_on_archived"
     t.index ["name"], name: "index_mailboxes_on_name", unique: true
+  end
+
+  create_table "message_reads", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "mailbox", null: false
+    t.string "message_id", null: false
+    t.datetime "read_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "mailbox", "message_id"], name: "index_message_reads_on_user_id_and_mailbox_and_message_id", unique: true
+    t.index ["user_id"], name: "index_message_reads_on_user_id"
   end
 
   create_table "monitor_messages", force: :cascade do |t|
@@ -54,5 +65,6 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_13_030000) do
     t.index "lower((username)::text)", name: "index_users_on_lower_username", unique: true
   end
 
+  add_foreign_key "message_reads", "users"
   add_foreign_key "user_sessions", "users"
 end

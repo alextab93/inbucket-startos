@@ -56,7 +56,7 @@ Two volumes: received mail on one, the client's own state on the other.
 | ----------------- | -------------------------- | -------------------------------------------------------------------- |
 | `main`            | `/config`, `/storage`      | Upstream's config directory and the message store                    |
 | `main`            | not mounted                | `store.json`, at the volume root                                     |
-| `client-postgres` | `/var/lib/postgresql/data` | The client's users, sessions, mailbox catalog, and monitor summaries |
+| `client-postgres` | `/var/lib/postgresql/data` | The client's users, sessions, mailbox catalog, read state, and monitor summaries |
 
 Only the `config` and `storage` subdirectories of `main` are mounted, so `store.json` sits beside them and is not visible to any container that does not need it. Messages themselves are files under `/storage`, one directory per mailbox — Inbucket's file store, not a database.
 
@@ -155,7 +155,7 @@ The strategy is mixed. `main` — every received message and upstream's config �
 
 Nothing is deliberately excluded. A restored instance needs nothing re-entered: the domain and storage settings come back in `store.json`, the client's account and saved mailbox catalog come back in the dump, and the credentials that worked before the backup still work.
 
-The monitor's summaries of past deliveries are in the dump too, but they are only a convenience view — the messages themselves are on `main` and are what actually matters.
+The monitor's summaries of past deliveries and per-user message read state are in the dump too, but the messages themselves are on `main` and are what actually matters.
 
 ## Limitations and Differences
 

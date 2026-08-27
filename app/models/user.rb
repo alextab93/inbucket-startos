@@ -2,6 +2,7 @@ class User < ApplicationRecord
   has_secure_password
 
   has_many :user_sessions, dependent: :destroy
+  has_many :message_reads, dependent: :destroy
 
   normalizes :username, with: ->(username) { username.strip.downcase }
 

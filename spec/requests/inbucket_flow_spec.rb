@@ -49,8 +49,31 @@ RSpec.describe "Inbucket flow", type: :request do
     get "/v1/inbucket/mailbox", params: { name: mailbox }
 
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body).to eq(JSON.parse(messages.to_json))
+    expect(response.parsed_body).to eq(JSON.parse(messages.to_json).map { |item| item.merge("read" => false) })
     expect(response.headers["Cache-Control"]).to eq("private, no-store")
+  end
+
+  it "returns persistent read state with mailbox contents" do
+    user = authenticate
+    stub_json("/api/v1/mailbox/#{mailbox}", messages)
+
+    patch "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}/read"
+    get "/v1/inbucket/mailboxes/#{mailbox}"
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to eq(JSON.parse(messages.to_json).map { |item| item.merge("read" => true) })
+    expect(MessageRead.where(user:, mailbox:, message_id:).count).to eq(1)
+  end
+
+  it "marks a message read idempotently" do
+    user = authenticate
+
+    2.times do
+      patch "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}/read"
+      expect(response).to have_http_status(:no_content)
+    end
+
+    expect(MessageRead.where(user:, mailbox:, message_id:).count).to eq(1)
   end
 
   it "saves a mailbox after it is confirmed to contain messages" do
@@ -288,18 +311,21 @@ RSpec.describe "Inbucket flow", type: :request do
   end
 
   it "deletes a message" do
-    authenticate
+    user = authenticate
+    MessageRead.record(user:, mailbox:, message_id:)
     stub_request(:delete, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}/#{message_id}")
       .to_return(status: 200, body: '"OK"', headers: { "Content-Type" => "application/json" })
 
     delete "/v1/inbucket/message", params: { name: mailbox, id: message_id }
 
     expect(response).to have_http_status(:no_content)
+    expect(MessageRead.where(user:, mailbox:, message_id:).count).to eq(0)
   end
 
   it "purges a mailbox and removes it from saved mailboxes" do
-    authenticate
+    user = authenticate
     Mailbox.record(mailbox)
+    MessageRead.record(user:, mailbox:, message_id:)
     stub_request(:delete, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}")
       .to_return(status: 200, body: '"OK"', headers: { "Content-Type" => "application/json" })
 
@@ -307,6 +333,7 @@ RSpec.describe "Inbucket flow", type: :request do
 
     expect(response).to have_http_status(:no_content)
     expect(Mailbox.find_by(name: mailbox)).to be_nil
+    expect(MessageRead.where(user:, mailbox:).count).to eq(0)
   end
 
   it "returns not found when Inbucket cannot find a message" do
@@ -336,6 +363,7 @@ RSpec.describe "Inbucket flow", type: :request do
          params: { username: user.username, password: "correct horse battery staple" }.to_json,
          headers: json_headers
     expect(response).to have_http_status(:ok)
+    user
   end
 
   def json_headers

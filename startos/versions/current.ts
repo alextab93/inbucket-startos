@@ -1,18 +1,18 @@
 import { IMPOSSIBLE, VersionInfo } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '3.1.1:9',
+  version: '3.1.1:10',
   releaseNotes: {
     en_US:
-      'Improves received-email rendering with isolated, sanitized HTML and CSS, preserves complex sender layouts, blocks remote tracking resources by default, and loads remote images only after explicit approval.',
+      'Tracks read messages in the private mailbox client and makes unread messages visually distinct while preserving a separate selected-message state.',
     es_ES:
-      'Mejora la visualización del correo recibido con HTML y CSS aislados y sanitizados, conserva diseños complejos del remitente, bloquea por defecto los recursos remotos de seguimiento y carga imágenes remotas solo tras una aprobación explícita.',
+      'Registra los mensajes leídos en el cliente privado y distingue visualmente los mensajes no leídos sin confundirlos con el mensaje seleccionado.',
     de_DE:
-      'Verbessert die Darstellung empfangener E-Mails mit isoliertem, bereinigtem HTML und CSS, erhält komplexe Absenderlayouts, blockiert externe Tracking-Ressourcen standardmäßig und lädt externe Bilder nur nach ausdrücklicher Zustimmung.',
+      'Speichert gelesene Nachrichten im privaten Postfach und kennzeichnet ungelesene Nachrichten deutlich, unabhängig von der ausgewählten Nachricht.',
     pl_PL:
-      'Ulepsza wyświetlanie odebranych wiadomości dzięki izolowanemu i oczyszczonemu HTML oraz CSS, zachowuje złożone układy nadawców, domyślnie blokuje zdalne zasoby śledzące i ładuje obrazy zdalne dopiero po wyraźnej zgodzie.',
+      'Zapisuje stan przeczytania wiadomości w prywatnym kliencie i wyraźnie odróżnia wiadomości nieprzeczytane od aktualnie wybranej wiadomości.',
     fr_FR:
-      'Améliore l’affichage des courriels reçus avec du HTML et du CSS isolés et assainis, conserve les mises en page complexes des expéditeurs, bloque par défaut les ressources de suivi distantes et ne charge les images distantes qu’après autorisation explicite.',
+      'Enregistre les messages lus dans le client privé et distingue clairement les messages non lus du message actuellement sélectionné.',
   },
   migrations: {
     up: async ({ effects }) => {},
