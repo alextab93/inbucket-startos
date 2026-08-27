@@ -64,7 +64,7 @@ Mail servers deliver to port 25, and StartOS publishes Inbucket's SMTP interface
 
 ### Web client interface
 
-Sign in, then type a mailbox name to open it — the mailbox does not have to exist yet. Mailboxes you have opened are saved to a list you can come back to, and you can archive the ones you are done with rather than deleting them.
+Sign in, then use **Add mailbox** to open a mailbox name — the mailbox does not have to exist yet. Mailboxes you have opened are saved under **Manage mailboxes**, where you can select several, archive the ones you are done with, or delete them. The message list and selected message use the available browser height and scroll independently on larger screens.
 
 The **Monitor** tab shows deliveries as they arrive across every mailbox, which is the quickest way to catch a message you are waiting on.
 

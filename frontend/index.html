@@ -18,10 +18,12 @@
   <a class="skip-link" href="#main-content">Skip to content</a>
   <header class="inbucket-header">
     <div class="container inbucket-header-content">
-      <div>
-        <p class="kicker">Private workspace</p>
-        <h1>Inbucket</h1>
-      </div>
+      <h1>Inbucket</h1>
+      <nav id="app-navigation" class="inbucket-tabs" aria-label="Mailbox views" hidden>
+        <button id="mailboxes-tab" class="inbucket-tab" type="button" aria-current="page">Mailboxes</button>
+        <button id="monitor-tab" class="inbucket-tab" type="button">Monitor</button>
+        <button id="archive-tab" class="inbucket-tab" type="button">Archived</button>
+      </nav>
       <button id="sign-out" class="button button-secondary" type="button" hidden>Sign out</button>
     </div>
   </header>
@@ -37,11 +39,6 @@
       <p id="access-message" class="status-message" role="status" aria-live="assertive">Checking for an active session.</p>
     </section>
     <div id="mailbox-view" hidden>
-      <div class="inbucket-tabs" role="tablist" aria-label="Mailbox views">
-        <button id="mailboxes-tab" class="inbucket-tab" type="button" role="tab" aria-selected="true">Mailboxes</button>
-        <button id="monitor-tab" class="inbucket-tab" type="button" role="tab" aria-selected="false">Monitor</button>
-        <button id="archive-tab" class="inbucket-tab" type="button" role="tab" aria-selected="false">Archived</button>
-      </div>
       <section id="monitor-view" class="monitor-view" aria-labelledby="monitor-title" hidden>
         <div class="monitor-heading">
           <div><h2 id="monitor-title">Realtime monitor</h2><p>Recent deliveries from the Inbucket monitor. Message bodies are not stored here.</p></div>
@@ -55,53 +52,64 @@
         <div id="archived-mailbox-options" class="archived-mailbox-options"></div>
       </section>
       <div id="mailboxes-view">
-      <section class="mailbox-selector" aria-labelledby="saved-mailboxes-title">
-        <div class="mailbox-selector-heading">
-          <h2 id="saved-mailboxes-title">Saved mailboxes</h2>
-          <div class="mailbox-selector-actions">
-            <button id="select-all-mailboxes" class="button button-secondary" type="button">Select all</button>
-            <button id="clear-mailboxes" class="button button-secondary" type="button">Clear</button>
-            <button id="archive-mailboxes" class="button button-secondary" type="button">Archive selected</button>
-            <button id="delete-mailboxes" class="button button-danger" type="button">Delete selected</button>
+        <div class="mailbox-toolbar">
+          <div class="mailbox-context">
+            <strong id="active-mailbox-summary">No mailbox selected</strong>
+            <p id="mailbox-status" class="status-message mailbox-status" role="status" aria-live="polite"></p>
           </div>
-        </div>
-        <div id="mailbox-options" class="mailbox-options" role="group" aria-labelledby="saved-mailboxes-title"></div>
-      </section>
-      <form id="mailbox-form" class="mailbox-form">
-        <label for="mailbox-name">Add a mailbox</label>
-        <div>
-          <input id="mailbox-name" name="mailbox" autocomplete="off" required>
-          <button class="button button-primary" type="submit">Add and open</button>
-        </div>
-      </form>
-      <p id="mailbox-status" class="status-message mailbox-status" role="status" aria-live="polite"></p>
-      <div class="mailbox-layout">
-        <section class="message-list-panel" aria-labelledby="mailbox-title">
-          <h2 id="mailbox-title">Messages</h2>
-          <div id="message-list" class="message-list"></div>
-        </section>
-        <article id="message-panel" class="message-panel" aria-labelledby="message-subject">
-          <div id="message-empty" class="message-empty">Select a message to read it.</div>
-          <div id="message-content" hidden>
-            <header class="message-header">
-              <div class="message-title-actions"><h2 id="message-subject"></h2><button id="delete-message" class="button button-danger" type="button">Delete message</button></div>
-              <dl>
-                <div><dt>From</dt><dd id="message-from"></dd></div>
-                <div><dt>To</dt><dd id="message-to"></dd></div>
-                <div><dt>Date</dt><dd id="message-date"></dd></div>
-              </dl>
-            </header>
-            <div id="message-body" class="message-body"></div>
-            <section id="message-attachments" class="message-attachments" aria-labelledby="message-attachments-title" hidden>
-              <h3 id="message-attachments-title">Attachments</h3>
-              <ul id="message-attachment-list"></ul>
+          <details class="mailbox-tool mailbox-add-tool">
+            <summary>Add mailbox</summary>
+            <form id="mailbox-form" class="mailbox-form">
+              <label for="mailbox-name">Mailbox name</label>
+              <div>
+                <input id="mailbox-name" name="mailbox" autocomplete="off" required>
+                <button class="button button-primary" type="submit">Add and open</button>
+              </div>
+            </form>
+          </details>
+          <details class="mailbox-tool mailbox-manage-tool">
+            <summary>Manage mailboxes</summary>
+            <section class="mailbox-selector" aria-labelledby="saved-mailboxes-title">
+              <div class="mailbox-selector-heading">
+                <h2 id="saved-mailboxes-title">Saved mailboxes</h2>
+                <div class="mailbox-selector-actions">
+                  <button id="select-all-mailboxes" class="button button-secondary" type="button">Select all</button>
+                  <button id="clear-mailboxes" class="button button-secondary" type="button">Clear</button>
+                  <button id="archive-mailboxes" class="button button-secondary" type="button">Archive selected</button>
+                  <button id="delete-mailboxes" class="button button-danger" type="button">Delete selected</button>
+                </div>
+              </div>
+              <div id="mailbox-options" class="mailbox-options" role="group" aria-labelledby="saved-mailboxes-title"></div>
             </section>
-            <button id="source-toggle" class="source-toggle" type="button" aria-expanded="false">View source</button>
-            <p id="source-status" class="status-message" role="status" aria-live="polite"></p>
-            <pre id="message-source" class="message-source" hidden></pre>
-          </div>
-        </article>
-      </div>
+          </details>
+        </div>
+        <div class="mailbox-layout">
+          <section class="message-list-panel" aria-labelledby="mailbox-title">
+            <h2 id="mailbox-title">Messages</h2>
+            <div id="message-list" class="message-list"></div>
+          </section>
+          <article id="message-panel" class="message-panel" aria-labelledby="message-subject">
+            <div id="message-empty" class="message-empty">Select a message to read it.</div>
+            <div id="message-content" hidden>
+              <header class="message-header">
+                <div class="message-title-actions"><h2 id="message-subject"></h2><button id="delete-message" class="button button-danger" type="button">Delete message</button></div>
+                <dl>
+                  <div><dt>From</dt><dd id="message-from"></dd></div>
+                  <div><dt>To</dt><dd id="message-to"></dd></div>
+                  <div><dt>Date</dt><dd id="message-date"></dd></div>
+                </dl>
+              </header>
+              <div id="message-body" class="message-body"></div>
+              <section id="message-attachments" class="message-attachments" aria-labelledby="message-attachments-title" hidden>
+                <h3 id="message-attachments-title">Attachments</h3>
+                <ul id="message-attachment-list"></ul>
+              </section>
+              <button id="source-toggle" class="source-toggle" type="button" aria-expanded="false">View source</button>
+              <p id="source-status" class="status-message" role="status" aria-live="polite"></p>
+              <pre id="message-source" class="message-source" hidden></pre>
+            </div>
+          </article>
+        </div>
       </div>
     </div>
   </main>

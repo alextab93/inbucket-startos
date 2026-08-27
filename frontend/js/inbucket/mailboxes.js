@@ -11,8 +11,13 @@ export const configureMailboxes = (options) => {
 
 const normalizeMailboxNames = (mailboxes) => [...new Set(mailboxes.map((mailbox) => mailbox.trim()).filter(Boolean))]
 
+const updateMailboxSummary = (mailboxes) => {
+  nodes.activeMailboxSummary.textContent = mailboxes.length === 0 ? 'No mailbox selected' : mailboxes.length === 1 ? mailboxes[0] : `${mailboxes.length} mailboxes`
+}
+
 export const loadMailboxes = async (mailboxes = selectedMailboxNames(), selectedId = '') => {
   const names = normalizeMailboxNames(mailboxes)
+  updateMailboxSummary(names)
   if (!names.length) {
     state.currentMailbox = ''
     state.currentMessageId = ''

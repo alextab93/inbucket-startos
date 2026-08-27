@@ -6,20 +6,14 @@
 .inbucket-header-content {
   display:flex;
   align-items:center;
-  justify-content:space-between;
-  gap:24px;
-  min-height:150px;
-  padding-block:28px
-}
-
-.inbucket-header .kicker {
-  margin:0 0 4px;
-  color:#93c5fd
+  gap:32px;
+  min-height:68px;
+  padding-block:8px
 }
 
 .inbucket-header h1 {
   margin:0;
-  font-size:clamp(2.4rem,7vw,4.5rem);
+  font-size:1.65rem;
   line-height:1
 }
 
@@ -29,7 +23,7 @@
 }
 
 .inbucket-main {
-  padding-block:48px 72px
+  padding-block:16px 24px
 }
 
 .inbucket-access {
@@ -70,32 +64,26 @@
   justify-self:start
 }
 
-.mailbox-form {
-  max-width:760px;
-  margin-bottom:16px
-}
-
 .inbucket-tabs {
   display:flex;
   gap:8px;
-  margin-bottom:28px;
-  border-bottom:1px solid var(--line)
+  margin-right:auto
 }
 
 .inbucket-tab {
-  padding:12px 16px;
-  color:var(--muted);
+  padding:9px 12px;
+  color:#cbd5e1;
   border:0;
-  border-bottom:3px solid transparent;
+  border-radius:8px;
   background:transparent;
   font:inherit;
   font-weight:750;
   cursor:pointer
 }
 
-.inbucket-tab[aria-selected="true"] {
-  color:var(--blue-dark);
-  border-bottom-color:var(--blue)
+.inbucket-tab:hover,.inbucket-tab[aria-current="page"] {
+  color:#fff;
+  background:#1e293b
 }
 
 .monitor-view {
@@ -199,12 +187,7 @@
 }
 
 .mailbox-selector {
-  max-width:760px;
-  margin-bottom:28px;
-  padding:20px;
-  border:1px solid var(--line);
-  border-radius:var(--radius);
-  background:var(--wash)
+  padding:20px
 }
 
 
@@ -291,14 +274,87 @@
   font:inherit
 }
 
+.mailbox-toolbar {
+  position:relative;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-height:58px;
+  margin-bottom:12px;
+  padding:8px 10px 8px 16px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--wash)
+}
+
+.mailbox-context {
+  display:flex;
+  align-items:baseline;
+  gap:14px;
+  min-width:0;
+  margin-right:auto
+}
+
+.mailbox-context strong {
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+
 .mailbox-status {
-  min-height:1.65em;
-  margin-bottom:28px
+  margin:0;
+  overflow:hidden;
+  color:var(--muted);
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+
+.mailbox-tool {
+  position:relative;
+  flex:none
+}
+
+.mailbox-tool>summary {
+  padding:8px 12px;
+  border:1px solid #64748b;
+  border-radius:8px;
+  background:#fff;
+  font-weight:750;
+  list-style:none;
+  cursor:pointer
+}
+
+.mailbox-tool>summary::-webkit-details-marker {
+  display:none
+}
+
+.mailbox-tool[open]>summary {
+  color:#fff;
+  border-color:var(--blue);
+  background:var(--blue)
+}
+
+.mailbox-tool>form,.mailbox-tool>section {
+  position:absolute;
+  top:calc(100% + 8px);
+  right:0;
+  width:min(680px,calc(100vw - 48px));
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff;
+  box-shadow:var(--shadow)
+}
+
+.mailbox-tool>form {
+  width:min(520px,calc(100vw - 48px));
+  padding:20px
 }
 
 .mailbox-layout {
   display:grid;
   grid-template-columns:minmax(260px,.7fr) minmax(0,1.5fr);
+  height:calc(100dvh - 178px);
   min-height:560px;
   overflow:hidden;
   border:1px solid var(--line);
@@ -307,6 +363,9 @@
 }
 
 .message-list-panel {
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr);
+  min-height:0;
   border-right:1px solid var(--line);
   background:var(--wash)
 }
@@ -320,8 +379,9 @@
 
 .message-list {
   display:grid;
-  max-height:680px;
-  overflow:auto
+  min-height:0;
+  overflow:auto;
+  align-content:start
 }
 
 .message-summary {
@@ -389,7 +449,9 @@
 
 .message-panel {
   min-width:0;
+  min-height:0;
   padding:32px;
+  overflow:auto;
   background:#fff
 }
 
@@ -534,6 +596,7 @@
 
 @media(max-width:800px) {
   .mailbox-layout {
+    height:auto;
     grid-template-columns:1fr
   }
 
@@ -545,15 +608,32 @@
   .message-list {
     max-height:320px
   }
+
+  .message-panel {
+    overflow:visible
+  }
 }
 
 @media(max-width:600px) {
   .inbucket-header-content {
-    min-height:125px
+    flex-wrap:wrap;
+    gap:8px 16px;
+    min-height:64px
+  }
+
+  .inbucket-header h1 {
+    margin-right:auto
+  }
+
+  .inbucket-tabs {
+    order:3;
+    width:100%;
+    margin:0;
+    overflow:auto
   }
 
   .inbucket-main {
-    padding-block:32px 48px
+    padding-block:12px 32px
   }
 
   .inbucket-access,.message-panel {
@@ -581,5 +661,37 @@
 
   .monitor-message {
     grid-template-columns:1fr
+  }
+
+  .mailbox-toolbar {
+    align-items:stretch;
+    flex-wrap:wrap
+  }
+
+  .mailbox-context {
+    display:block;
+    width:100%
+  }
+
+  .mailbox-status {
+    white-space:normal
+  }
+
+  .mailbox-tool {
+    flex:1
+  }
+
+  .mailbox-tool>summary {
+    text-align:center
+  }
+
+  .mailbox-tool>form,.mailbox-tool>section {
+    position:fixed;
+    top:128px;
+    right:16px;
+    left:16px;
+    width:auto;
+    max-height:calc(100dvh - 144px);
+    overflow:auto
   }
 }
