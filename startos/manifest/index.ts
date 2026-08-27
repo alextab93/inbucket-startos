@@ -5,12 +5,12 @@ export const manifest = setupManifest({
   id: 'inbucket',
   title: 'Inbucket',
   license: 'MIT',
-  packageRepo: 'https://github.com/alextab93/inbucket-startos',
+  packageRepo: 'https://github.com/Start9-Community/inbucket-startos',
   upstreamRepo: 'https://github.com/inbucket/inbucket',
   marketingUrl: 'https://www.inbucket.org/',
   donationUrl: null,
   description: { short, long },
-  volumes: ['main', 'client-config', 'client-postgres'],
+  volumes: ['main', 'client-postgres'],
   images: {
     main: {
       source: {

@@ -8,9 +8,36 @@ import {
   mounts,
   pop3Port,
   smtpPort,
-  webHostId,
   webPort,
 } from './utils'
+
+// The SDK's runHealthScript and checkWebUrl log the command, its result and an
+// Error on every failed poll, which buries a normal startup in its own log.
+// A probe that fails because it cannot run at all still has to be visible, so
+// the first failure of each check reports why and the rest stay quiet.
+const probe = (
+  subcontainer: {
+    exec: (
+      command: string[],
+    ) => Promise<{ exitCode: number | null; stderr: string | Buffer }>
+  },
+  command: string[],
+  ready: string,
+  notReady: string,
+) => {
+  let reported = false
+  return async () => {
+    const { exitCode, stderr } = await subcontainer.exec(command)
+    if (exitCode === 0) return { result: 'success' as const, message: ready }
+    if (!reported) {
+      reported = true
+      console.warn(
+        `${command[0]} exited ${exitCode}: ${stderr.toString().trim()}`,
+      )
+    }
+    return { result: 'failure' as const, message: notReady }
+  }
+}
 
 export const main = sdk.setupMain(async ({ effects }) => {
   const config = await storeJson.read((store) => store).const(effects)
@@ -25,23 +52,13 @@ export const main = sdk.setupMain(async ({ effects }) => {
     throw new Error('Inbucket client secrets have not been initialized')
   }
 
-  const inbucketAddress = await sdk.host
-    .getBridgeAddress(effects, {
-      packageId: 'inbucket',
-      hostId: webHostId,
-      internalPort: webPort,
-      ssl: false,
-    })
-    .const()
-  if (!inbucketAddress) throw new Error('Inbucket web host is not available')
-
   const clientEnv = {
     DATABASE_URL: `postgresql://${databaseUser}:${config.databasePassword}@127.0.0.1:5432/${databaseName}`,
     SECRET_KEY_BASE: config.secretKeyBase,
     RAILS_ENV: 'production',
     RAILS_LOG_TO_STDOUT: 'true',
     PORT: String(clientPort),
-    INBUCKET_BASE_URL: `http://${inbucketAddress}`,
+    INBUCKET_BASE_URL: `http://127.0.0.1:${webPort}`,
     ADMIN_USERNAME: config.adminUsername,
     ADMIN_PASSWORD: config.adminPassword,
   }
@@ -69,7 +86,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
     effects,
     { imageId: 'client' },
     sdk.Mounts.of(),
-    'client',
+    'client-app',
   )
 
   return sdk.Daemons.of(effects)
@@ -95,11 +112,12 @@ export const main = sdk.setupMain(async ({ effects }) => {
         },
       },
       ready: {
-        display: 'Admin Web Interface',
+        display: i18n('Admin Web Interface'),
+        gracePeriod: 60000,
         fn: () =>
           sdk.healthCheck.checkPortListening(effects, webPort, {
-            successMessage: 'The admin web interface is ready',
-            errorMessage: 'The admin web interface is not ready',
+            successMessage: i18n('The admin web interface is ready'),
+            errorMessage: i18n('The admin web interface is not ready'),
           }),
       },
       requires: [],
@@ -107,6 +125,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
     .addHealthCheck('smtp', {
       ready: {
         display: i18n('Inbound SMTP'),
+        gracePeriod: 60000,
         fn: () =>
           sdk.healthCheck.checkPortListening(effects, smtpPort, {
             successMessage: i18n('The inbound SMTP listener is ready'),
@@ -127,24 +146,22 @@ export const main = sdk.setupMain(async ({ effects }) => {
         },
       },
       ready: {
-        display: 'Client Database',
-        fn: () =>
-          sdk.healthCheck.runHealthScript(
-            [
-              'pg_isready',
-              '-h',
-              '127.0.0.1',
-              '-U',
-              databaseUser,
-              '-d',
-              databaseName,
-            ],
-            postgresSubcontainer,
-            {
-              errorMessage: 'The client database is not ready',
-              message: () => 'The client database is ready',
-            },
-          ),
+        display: i18n('Client Database'),
+        gracePeriod: 60000,
+        fn: probe(
+          postgresSubcontainer,
+          [
+            'pg_isready',
+            '-h',
+            '127.0.0.1',
+            '-U',
+            databaseUser,
+            '-d',
+            databaseName,
+          ],
+          i18n('The client database is ready'),
+          i18n('The client database is not ready'),
+        ),
       },
       requires: [],
     })
@@ -172,16 +189,14 @@ export const main = sdk.setupMain(async ({ effects }) => {
         env: clientEnv,
       },
       ready: {
-        display: 'Client Monitor',
-        fn: () =>
-          sdk.healthCheck.runHealthScript(
-            ['test', '-f', '/tmp/inbucket-monitor-ready'],
-            clientSubcontainer,
-            {
-              errorMessage: 'The client monitor is not ready',
-              message: () => 'The client monitor is ready',
-            },
-          ),
+        display: i18n('Client Monitor'),
+        gracePeriod: 120000,
+        fn: probe(
+          clientSubcontainer,
+          ['test', '-f', '/tmp/inbucket-monitor-ready'],
+          i18n('The client monitor is ready'),
+          i18n('The client monitor is not ready'),
+        ),
       },
       requires: ['client-account-prepare'],
     })
@@ -192,16 +207,21 @@ export const main = sdk.setupMain(async ({ effects }) => {
         env: clientEnv,
       },
       ready: {
-        display: 'Web Client Interface',
-        fn: () =>
-          sdk.healthCheck.checkWebUrl(
-            effects,
+        display: i18n('Web Client Interface'),
+        gracePeriod: 120000,
+        fn: probe(
+          clientSubcontainer,
+          // busybox wget: the client image is ruby-alpine and has no curl
+          [
+            'wget',
+            '-q',
+            '-O',
+            '/dev/null',
             `http://127.0.0.1:${clientPort}/up`,
-            {
-              successMessage: 'The web client interface is ready',
-              errorMessage: 'The web client interface is not ready',
-            },
-          ),
+          ],
+          i18n('The web client interface is ready'),
+          i18n('The web client interface is not ready'),
+        ),
       },
       requires: ['client-account-prepare'],
     })

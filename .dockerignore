@@ -1,12 +1,11 @@
 .git
 .gitmodules
-.ai-workspace
 node_modules
 javascript
-public
-upstream-project
+ncc-cache
+docker-images
 *.s9pk
+public
 log/*
 tmp/*
 spec
-test

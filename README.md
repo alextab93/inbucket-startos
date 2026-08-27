@@ -1,119 +1,229 @@
-# Inbucket for StartOS
+<p align="center">
+  <img src="icon.png" alt="Inbucket Logo" width="21%">
+</p>
 
-Inbucket receives SMTP mail for a domain you control. This package combines the
-upstream Inbucket receiver with an authenticated Rails mailbox client, while
-preserving the upstream administration interface and REST API.
+# Inbucket on StartOS
 
-## Quick start (StartOS)
+> Everything not listed in this document should behave the same as upstream
+> Inbucket. If a feature, setting, or behavior is not mentioned here, the
+> upstream documentation is accurate and fully applicable — see the
+> Documentation section of `instructions.md` for links.
 
-Install Inbucket from the start9.tabordalab.com (TabordaLab StartOS registry), or sideload the `.s9pk` package from this repository's GitHub release.
+Inbucket is a disposable mail server: it accepts SMTP for a whole domain without any mailbox existing beforehand, and makes every message it receives readable through webmail and a REST API.
 
-<img width="1419" height="527" alt="image" src="https://github.com/user-attachments/assets/38d7f4f6-73e2-4b8d-a855-b00aa41f852f" />
+This package adds an authenticated mailbox client of its own alongside upstream, because upstream's interface has no login.
 
-## Interfaces
+---
 
-| Interface | ID | Purpose | Access guidance |
-| --- | --- | --- | --- |
-| Web Client Interface | `client` | Authenticated mailbox reading, monitor, source, CID images, and downloads | Normal user interface |
-| Admin Web Interface | `ui` | Upstream webmail, status, and diagnostics | Trusted gateway addresses only |
-| REST API | `rest-api` | Upstream automated mailbox API at `/api/v1/` | Trusted gateway addresses only |
-| Inbound SMTP | `smtp` | Receives mail for the configured domain | Raw TCP delivery |
+## Table of Contents
 
-The Web Client Interface is the ordinary mailbox interface. It has generated
-administrator credentials, encrypted HTTP-only sessions, private no-store API
-responses, a strict same-origin CSP, sanitized HTML, and a same-origin CID
-image proxy for AVIF, GIF, JPEG, PNG, and WebP.
+- [Image and Container Runtime](#image-and-container-runtime)
+- [Volume and Data Layout](#volume-and-data-layout)
+- [File Models](#file-models)
+- [Dependencies](#dependencies)
+- [Network Access and Interfaces](#network-access-and-interfaces)
+- [Installation and First-Run Flow](#installation-and-first-run-flow)
+- [Actions](#actions)
+- [Tasks](#tasks)
+- [Health Checks](#health-checks)
+- [Backups and Restore](#backups-and-restore)
+- [Limitations and Differences](#limitations-and-differences)
+- [Quick Reference for AI Consumers](#quick-reference-for-ai-consumers)
 
-The Admin Web Interface is the unmodified upstream interface. It deliberately
-has no mailbox authentication. Do not publish it through untrusted gateway
-addresses. The REST API has the same upstream mailbox exposure and should be
-treated accordingly.
+---
 
-## Runtime
+## Image and Container Runtime
 
-The package keeps the pinned upstream `inbucket/inbucket` image for SMTP,
-storage, upstream webmail, and REST. A separate `client` image builds the Vite
-frontend and runs the Rails application. A private PostgreSQL sidecar stores
-the client administrator, sessions, saved mailbox catalog, and monitor
-summaries.
+Three images, one of which is this repository's own application.
 
-The Rails client reaches Inbucket through the StartOS bridge address for the
-package's own web host. It does not use Compose DNS or loopback to cross
-subcontainers.
+| Image      | Source                                                     | Entrypoint                     |
+| ---------- | ---------------------------------------------------------- | ------------------------------ |
+| `main`     | Upstream `inbucket/inbucket`, unmodified, pinned by digest | Upstream's                     |
+| `client`   | Built from this repo's `Dockerfile`                        | `puma`, and two `rails runner` |
+| `postgres` | Upstream `postgres` alpine, pinned by digest               | Upstream's                     |
 
-## Upstream provenance
+All three build for `x86_64` and `aarch64`.
 
-StartOS package version `3.1.1:5` retains the official multi-architecture
-Inbucket image. The image is not rebuilt from the submodule.
+The `client` image is not a wrapper around anything upstream — it is a Rails API and a Vite-built browser frontend written for this package, backed by its own PostgreSQL. It exists because upstream Inbucket's webmail deliberately has no authentication: anyone who can reach it can read every mailbox. The client puts a login in front of the same data, which it reads through upstream's REST API and monitor websocket over loopback.
 
-| Component | Immutable source |
-| --- | --- |
-| Upstream release | `v3.1.1` |
-| `upstream-project` commit | `6eff554469f681ab99f540fc440e24e06a7be636` |
-| Main image | `inbucket/inbucket:3.1.1@sha256:4a4c4cf553967e1863e4f48c828774786ac9ee73c53b3a3ecef10f66e5a2cdfb` |
+Three subcontainers run: `inbucket` (upstream), `client-postgres`, and `client-app`. The last hosts three processes — the Puma web server, the monitor, and the two setup oneshots — in one subcontainer, so they share a filesystem. Attach with `start-cli package attach inbucket -n client-app`.
 
-The upstream release workflow builds the `3.1.1` and `sha-6eff554` image tags
-from the same tagged source commit. Docker Hub reports the same architecture
-digests for both tags. The manifest pins the multi-architecture `3.1.1` digest,
-so the submodule documents and audits the upstream source without changing the
-runtime image provenance.
+## Volume and Data Layout
 
-| Volume | Contents |
-| --- | --- |
-| `main` | Existing upstream `/config`, `/storage`, and StartOS domain settings |
-| `client-config` | Generated Rails secret and client credentials |
-| `client-postgres` | Private PostgreSQL state for the authenticated client |
+Two volumes: received mail on one, the client's own state on the other.
 
-Backups retain the existing `main` volume and add the client configuration
-volume plus a PostgreSQL dump of `client-postgres`.
+| Volume            | Mount point                | Contents                                                             |
+| ----------------- | -------------------------- | -------------------------------------------------------------------- |
+| `main`            | `/config`, `/storage`      | Upstream's config directory and the message store                    |
+| `main`            | not mounted                | `store.json`, at the volume root                                     |
+| `client-postgres` | `/var/lib/postgresql/data` | The client's users, sessions, mailbox catalog, and monitor summaries |
 
-## Setup and operations
+Only the `config` and `storage` subdirectories of `main` are mounted, so `store.json` sits beside them and is not visible to any container that does not need it. Messages themselves are files under `/storage`, one directory per mailbox — Inbucket's file store, not a database.
 
-1. Run **Configure Inbucket** with the recipient domain, retention period, and
-   per-mailbox message limit.
-2. Run **Show Login Credentials** to retrieve the generated Web Client
-   Interface credentials.
-3. Use **Refresh Login Password** to rotate the client password. It restarts
-   the service and invalidates existing client sessions.
-4. Configure DNS and raw TCP forwarding for port 25 to the StartOS Inbound SMTP
-   interface as described in [instructions.md](instructions.md).
+## File Models
 
-Inbucket is an SMTP receiver, not an outbound SMTP client. This package does
-not use StartOS outbound SMTP credentials or forward received mail externally.
+One model, holding StartOS-side state. Upstream Inbucket has no configuration file the package owns; everything it is told arrives as an environment variable, re-applied on every start.
 
-## Security behavior
+| Model        | File              | Seeded                                    | Rewritten       |
+| ------------ | ----------------- | ----------------------------------------- | --------------- |
+| `store.json` | `main:store.json` | At install, and by **Set Admin Password** | By both actions |
 
-The client renders untrusted HTML only after sanitization. Its CSP does not
-allow third-party image loads or `cid:` URLs. CID images are fetched through an
-authenticated same-origin endpoint and only supported raster formats are
-returned. Attachments are authenticated downloads with their declared MIME
-type, `Content-Disposition: attachment`, and `X-Content-Type-Options: nosniff`.
-PDF, HTML, SVG, and other active content are not embedded. A PDF viewer remains
-a separate follow-up.
+It carries two unrelated things. The first is the settings the user chose — accepted domain, retention period, per-mailbox message cap — which are read at start and turned into `INBUCKET_*` variables. Changing any of them requires a restart to take effect, and the service reads them fresh each time, so an edit made here always wins.
 
-## Standalone Inbucket Client migration
+The second is the client's own secrets: its PostgreSQL password and Rails signing key, seeded once at install and never regenerated — a restore keeps the ones that came with the backup, which is what lets the restored database still be read. The client's password sits alongside them but is minted only by **Set Admin Password**; init never generates one.
 
-The first integrated release starts with clean client state under the Inbucket
-package ID. It does not automatically move the standalone `inbucket-client`
-PostgreSQL volume, uninstall the standalone package, or promise a silent
-upgrade. Keep the standalone package installed until an export/import
-procedure for credentials and saved mailbox state has been validated on a
-non-production server.
+**`main` reads the store reactively**, so writing it restarts the service. That is how both actions take effect, and why neither asks the user to restart anything.
 
-After live migration validation and release verification, the standalone
-package can be marked deprecated in its documentation and registry listing.
+## Dependencies
 
-## Development
+None.
 
-```sh
-npm ci
-npm run check
-npm run build
-node node_modules/@start9labs/start-sdk/lint.mjs
-bundle exec rspec
-make arches
+## Network Access and Interfaces
+
+Four interfaces across three hosts. The split matters: two of them have no authentication at all.
+
+| Interface            | Id         | Type  | Host     | Port | Purpose                                          |
+| -------------------- | ---------- | ----- | -------- | ---- | ------------------------------------------------ |
+| Web Client Interface | `client`   | `ui`  | `client` | 3000 | The authenticated mailbox reader                 |
+| Admin Web Interface  | `ui`       | `ui`  | `web`    | 9000 | Upstream webmail, server status, and diagnostics |
+| REST API             | `rest-api` | `api` | `web`    | 9000 | Upstream's mailbox API, at `/api/v1/`            |
+| Inbound SMTP         | `smtp`     | `api` | `smtp`   | 2500 | Receives mail for the configured domain          |
+
+**`ui` and `rest-api` share one host and neither requires a credential.** Anyone who can reach either can read, and delete, every message in every mailbox. They are upstream's own interfaces and behave exactly as upstream documents; the package adds nothing to them. `client` is the one to publish for ordinary use.
+
+`smtp` is raw TCP with no TLS — Inbucket is a receiver for testing and disposable addresses, and it accepts plaintext SMTP on 2500. Internet mail arrives on port 25, so reaching it from outside needs an external 25 → 2500 forward; an HTTP reverse proxy cannot carry SMTP. POP3 is bound to loopback only and is not exported.
+
+## Installation and First-Run Flow
+
+Install generates the client's database password and Rails signing key, then raises two `critical` tasks: one pointing at **Configure Inbucket**, because Inbucket has nothing to accept mail for without a domain, and one at **Set Admin Password**, because the client has no credential until it is run. Both block startup.
+
+On the first start after that, the client's PostgreSQL initialises, `client-database-prepare` creates its schema, and `client-account-prepare` writes the administrator account from `store.json`. That sync runs on every start, which is what applies a rotated password — the action writes the store, the store change restarts the service, and the oneshot re-syncs the account.
+
+## Actions
+
+Two actions, both user-facing.
+
+### Configure Inbucket
+
+- **When to run it** — first at install, prompted by the task; afterwards to change the accepted domain or the storage limits.
+- **What the domain is** — a literal match against the recipient address, nothing more. It is never resolved, and the package never verifies ownership, so a reserved name like `mailbox.test` is a perfectly valid answer for someone only feeding Inbucket from their own applications. A domain the user owns is needed only to receive mail from the internet, which additionally needs the port-25 forward under [Limitations](#limitations-and-differences).
+- **What it changes** — the domain, retention period, and per-mailbox cap in `store.json`. The form is pre-filled with what is already saved.
+- **Cost** — instant to save. The new values reach Inbucket on its next start.
+- **Repeat safety** — idempotent.
+- **What happens next** — restart to apply. Changing the domain does not rename existing mailboxes, and mail for the old domain stops being accepted. Lowering retention or the message cap deletes stored messages that no longer fit.
+- **Outputs** — none.
+
+### Set Admin Password
+
+- **When to run it** — at install, prompted by the task; afterwards to rotate the password, including after losing it.
+- **What it changes** — generates a new random password and writes it to `store.json`. The `client-account-prepare` oneshot applies it to the client's account on the restart that follows.
+- **Cost** — writing the store restarts the whole service, so mail delivery is interrupted for as long as that takes.
+- **Repeat safety** — safe to repeat, and never a no-op: each run mints a new password and discards the previous one.
+- **Outputs** — the username and the new password, shown once. There is no action that reads it back — rotating is how a lost password is replaced.
+
+## Tasks
+
+Two tasks, both raised from init rather than only at install.
+
+| Task                       | Severity   | Raised by                        | Cleared by         |
+| -------------------------- | ---------- | -------------------------------- | ------------------ |
+| Run **Configure Inbucket** | `critical` | Init, whenever `domain` is unset | Running the action |
+
+`critical` blocks Inbucket from starting and suspends the ordinary Start/Stop controls, so a user reporting "there are no buttons" is looking at this. The check runs on every init, not only at install, so clearing the domain raises it again.
+
+## Health Checks
+
+Four checks, and the ordering between them is the diagnostic.
+
+| Check             | Probes                                                       |
+| ----------------- | ------------------------------------------------------------ |
+| `inbucket`        | Upstream's web port is listening                             |
+| `smtp`            | The SMTP port is listening — requires `inbucket`             |
+| `client-postgres` | `pg_isready` against the client's database                   |
+| `client-monitor`  | The monitor's ready file exists — requires the account setup |
+| `client`          | `GET /up` on the Rails client                                |
+
+`smtp` failing while `inbucket` passes means the listener did not bind — almost always a domain Inbucket rejected at start.
+
+`client-monitor` is the one worth understanding: it tracks a websocket subscription to upstream's `/api/v2/monitor/messages`, and its ready file disappears when that socket closes. A monitor that keeps going not-ready and back means the client is losing its connection to upstream rather than failing itself — the monitor reconnects on its own every few seconds. Its failure costs the "Monitor" tab and new mailboxes appearing on their own; reading mail through the client is unaffected.
+
+`client` failing while `client-postgres` passes means Puma did not come up, or the schema setup ahead of it failed — the `client-database-prepare` and `client-account-prepare` output in the logs says which.
+
+## Backups and Restore
+
+The strategy is mixed. `main` — every received message and upstream's config — is copied wholesale. `client-postgres` is **dumped and replayed**, not copied: its files are never captured, and restore rebuilds the database by replaying the dump into a fresh cluster.
+
+Nothing is deliberately excluded. A restored instance needs nothing re-entered: the domain and storage settings come back in `store.json`, the client's account and saved mailbox catalog come back in the dump, and the credentials that worked before the backup still work.
+
+The monitor's summaries of past deliveries are in the dump too, but they are only a convenience view — the messages themselves are on `main` and are what actually matters.
+
+## Limitations and Differences
+
+1. **Upstream's web interface and REST API have no authentication and the package does not add any.** This is upstream's design, not a gap; it is why the client exists.
+2. **The SMTP listener has no TLS**, so mail arrives in the clear. It is a receiver for testing and disposable addresses.
+3. **POP3 is bound to loopback and not exported.** Upstream serves it; here it is unreachable.
+4. **Only one domain is accepted at a time.** Upstream can accept several; the package's action takes one.
+5. **The client renders HTML mail only after sanitizing it**, with a strict same-origin content policy. Remote images do not load, `cid:` images are proxied through an authenticated endpoint and only common raster formats are returned, and attachments download rather than display — PDF and SVG included.
+6. **Reaching Inbucket from the internet needs an external port 25 forward.** StartOS publishes the SMTP interface on 2500 and cannot map 25 for you.
+
+## Quick Reference for AI Consumers
+
+```yaml
+package_id: inbucket
+images:
+  main: inbucket/inbucket
+  client: built from Dockerfile
+  postgres: postgres
+architectures: [x86_64, aarch64]
+subcontainers: [inbucket, client-app, client-postgres]
+volumes:
+  main: /config, /storage
+  client-postgres: /var/lib/postgresql/data
+file_models:
+  - store.json
+startos_managed_env_vars:
+  - INBUCKET_MAILBOXNAMING
+  - INBUCKET_SMTP_ADDR
+  - INBUCKET_SMTP_DOMAIN
+  - INBUCKET_SMTP_DEFAULTACCEPT
+  - INBUCKET_SMTP_ACCEPTDOMAINS
+  - INBUCKET_SMTP_DEFAULTSTORE
+  - INBUCKET_SMTP_STOREDOMAINS
+  - INBUCKET_SMTP_TIMEOUT
+  - INBUCKET_WEB_ADDR
+  - INBUCKET_POP3_ADDR
+  - INBUCKET_STORAGE_TYPE
+  - INBUCKET_STORAGE_PARAMS
+  - INBUCKET_STORAGE_RETENTIONPERIOD
+  - INBUCKET_STORAGE_MAILBOXMSGCAP
+  - DATABASE_URL
+  - SECRET_KEY_BASE
+  - RAILS_ENV
+  - RAILS_LOG_TO_STDOUT
+  - PORT
+  - INBUCKET_BASE_URL
+  - ADMIN_USERNAME
+  - ADMIN_PASSWORD
+  - POSTGRES_DB
+  - POSTGRES_USER
+  - POSTGRES_PASSWORD
+  - PGDATA
+dependencies: none
+interfaces:
+  client: { type: ui, port: 3000 }
+  ui: { type: ui, port: 9000 }
+  rest-api: { type: api, port: 9000 }
+  smtp: { type: api, port: 2500 }
+actions:
+  - configure-domain
+  - set-admin-password
+tasks:
+  - { action: configure-domain, severity: critical }
+  - { action: set-admin-password, severity: critical }
+health_checks:
+  - inbucket
+  - smtp
+  - client-postgres
+  - client-monitor
+  - client
 ```
-
-The Rails request and service specs require a real PostgreSQL test database.
-Build package architectures serially from a clean signed commit and inspect
-each S9PK manifest and commitment before publishing.
