@@ -1,0 +1,7 @@
+From: Sender <sender@example.com>
+To: Inbox <inbox@example.test>
+Subject: Plain text links
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+Open https://example.com/account or contact support@example.com.

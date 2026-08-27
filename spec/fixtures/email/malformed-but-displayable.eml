@@ -1,0 +1,10 @@
+From: Sender <sender@example.com>
+To: Inbox <inbox@example.test>
+Subject: Malformed but displayable
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="missing-close"
+
+--missing-close
+Content-Type: text/plain; charset=UTF-8
+
+This body remains readable even though the final MIME boundary is missing.

@@ -1,0 +1,15 @@
+From: Sender <sender@example.com>
+To: Inbox <inbox@example.test>
+Subject: Multipart alternative
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="alternative"
+
+--alternative
+Content-Type: text/plain; charset=UTF-8
+
+Your verification code is 123456.
+--alternative
+Content-Type: text/html; charset=UTF-8
+
+<p>Your verification code is <strong>123456</strong>.</p>
+--alternative--

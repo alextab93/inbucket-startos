@@ -1,119 +1,216 @@
-# Inbucket for StartOS
+<p align="center">
+  <img src="icon.png" alt="Inbucket Logo" width="21%">
+</p>
 
-Inbucket receives SMTP mail for a domain you control. This package combines the
-upstream Inbucket receiver with an authenticated Rails mailbox client, while
-preserving the upstream administration interface and REST API.
+# Inbucket on StartOS
 
-## Quick start (StartOS)
+> Upstream documentation: <https://www.inbucket.org/>
+>
+> Everything not listed here should behave like upstream Inbucket 3.1.1. If a
+> feature, setting, or behavior is not mentioned, the upstream documentation is
+> accurate and fully applicable.
 
-Install Inbucket from the start9.tabordalab.com (TabordaLab StartOS registry), or sideload the `.s9pk` package from this repository's GitHub release.
+[Inbucket](https://github.com/inbucket/inbucket) is a disposable email server.
+This package adds StartOS orchestration, persistent settings, an authenticated
+mailbox client, and a private client database around the upstream receiver.
 
-<img width="1419" height="527" alt="image" src="https://github.com/user-attachments/assets/38d7f4f6-73e2-4b8d-a855-b00aa41f852f" />
+---
 
-## Interfaces
+## Table of Contents
 
-| Interface | ID | Purpose | Access guidance |
+- [Image and Container Runtime](#image-and-container-runtime)
+- [Volume and Data Layout](#volume-and-data-layout)
+- [File Models](#file-models)
+- [Dependencies](#dependencies)
+- [Network Access and Interfaces](#network-access-and-interfaces)
+- [Installation and First-Run Flow](#installation-and-first-run-flow)
+- [Configuration Management](#configuration-management)
+- [Actions](#actions)
+- [Tasks](#tasks)
+- [Health Checks](#health-checks)
+- [Backups and Restore](#backups-and-restore)
+- [Limitations and Differences](#limitations-and-differences)
+- [What Is Unchanged from Upstream](#what-is-unchanged-from-upstream)
+- [Contributing](#contributing)
+- [Quick Reference for AI Consumers](#quick-reference-for-ai-consumers)
+
+---
+
+## Image and Container Runtime
+
+| Image | Source | Architectures | Purpose |
 | --- | --- | --- | --- |
-| Web Client Interface | `client` | Authenticated mailbox reading, monitor, source, CID images, and downloads | Normal user interface |
-| Admin Web Interface | `ui` | Upstream webmail, status, and diagnostics | Trusted gateway addresses only |
-| REST API | `rest-api` | Upstream automated mailbox API at `/api/v1/` | Trusted gateway addresses only |
-| Inbound SMTP | `smtp` | Receives mail for the configured domain | Raw TCP delivery |
+| `main` | Digest-pinned `inbucket/inbucket:3.1.1` | x86_64, aarch64 | SMTP, upstream webmail, REST API, POP3, and file-backed mail storage |
+| `client` | Package Dockerfile | x86_64, aarch64 | Rails API and Vite mailbox client |
+| `postgres` | Digest-pinned PostgreSQL 17.6 Alpine | x86_64, aarch64 | Private authenticated-client state |
 
-The Web Client Interface is the ordinary mailbox interface. It has generated
-administrator credentials, encrypted HTTP-only sessions, private no-store API
-responses, a strict same-origin CSP, sanitized HTML, and a same-origin CID
-image proxy for AVIF, GIF, JPEG, PNG, and WebP.
+The official Inbucket image remains unmodified. `upstream-project` is pinned to
+commit `6eff554469f681ab99f540fc440e24e06a7be636` for source provenance; the
+runtime image is pinned separately by OCI digest.
 
-The Admin Web Interface is the unmodified upstream interface. It deliberately
-has no mailbox authentication. Do not publish it through untrusted gateway
-addresses. The REST API has the same upstream mailbox exposure and should be
-treated accordingly.
+## Volume and Data Layout
 
-## Runtime
+| Volume | Mount point | Contents |
+| --- | --- | --- |
+| `main` | `/config` and `/storage` in Inbucket | Received mail, upstream configuration, and StartOS `store.json` |
+| `client-config` | StartOS-managed file storage | Reserved client configuration volume |
+| `client-postgres` | `/var/lib/postgresql/data` | Users, sessions, saved mailbox catalog, and monitor summaries |
 
-The package keeps the pinned upstream `inbucket/inbucket` image for SMTP,
-storage, upstream webmail, and REST. A separate `client` image builds the Vite
-frontend and runs the Rails application. A private PostgreSQL sidecar stores
-the client administrator, sessions, saved mailbox catalog, and monitor
-summaries.
+Email bodies remain file-backed in upstream Inbucket. PostgreSQL does not store
+received messages.
 
-The Rails client reaches Inbucket through the StartOS bridge address for the
-package's own web host. It does not use Compose DNS or loopback to cross
-subcontainers.
+## File Models
 
-## Upstream provenance
+`store.json` is managed through the StartOS SDK and contains:
 
-StartOS package version `3.1.1:5` retains the official multi-architecture
-Inbucket image. The image is not rebuilt from the submodule.
+- recipient domain;
+- retention period;
+- per-mailbox message cap;
+- maximum SMTP message size in MiB;
+- generated database password, Rails secret, username, and login password.
 
-| Component | Immutable source |
-| --- | --- |
-| Upstream release | `v3.1.1` |
-| `upstream-project` commit | `6eff554469f681ab99f540fc440e24e06a7be636` |
-| Main image | `inbucket/inbucket:3.1.1@sha256:4a4c4cf553967e1863e4f48c828774786ac9ee73c53b3a3ecef10f66e5a2cdfb` |
+Missing or invalid settings use safe defaults. Existing installations without
+the message-size field resolve to 50 MiB.
 
-The upstream release workflow builds the `3.1.1` and `sha-6eff554` image tags
-from the same tagged source commit. Docker Hub reports the same architecture
-digests for both tags. The manifest pins the multi-architecture `3.1.1` digest,
-so the submodule documents and audits the upstream source without changing the
-runtime image provenance.
+## Dependencies
 
-| Volume | Contents |
-| --- | --- |
-| `main` | Existing upstream `/config`, `/storage`, and StartOS domain settings |
-| `client-config` | Generated Rails secret and client credentials |
-| `client-postgres` | Private PostgreSQL state for the authenticated client |
+There are no external StartOS package dependencies. Inbucket, the Rails client,
+and PostgreSQL are orchestrated as subcontainers of this package.
 
-Backups retain the existing `main` volume and add the client configuration
-volume plus a PostgreSQL dump of `client-postgres`.
+## Network Access and Interfaces
 
-## Setup and operations
+| Interface | ID | Internal port | Type | Purpose |
+| --- | --- | --- | --- | --- |
+| Web Client Interface | `client` | 3000 | UI | Authenticated mailbox access |
+| Admin Web Interface | `ui` | 9000 | UI | Upstream webmail, status, and diagnostics |
+| REST API | `rest-api` | 9000 | API | Upstream `/api/v1/` automation |
+| Inbound SMTP | `smtp` | 2500 | Raw TCP | Receives mail for the configured domain |
 
-1. Run **Configure Inbucket** with the recipient domain, retention period, and
-   per-mailbox message limit.
-2. Run **Show Login Credentials** to retrieve the generated Web Client
-   Interface credentials.
-3. Use **Refresh Login Password** to rotate the client password. It restarts
-   the service and invalidates existing client sessions.
-4. Configure DNS and raw TCP forwarding for port 25 to the StartOS Inbound SMTP
-   interface as described in [instructions.md](instructions.md).
+The Admin Web Interface and REST API retain upstream's unauthenticated mailbox
+access. Publish them only through trusted StartOS gateway addresses. The Web
+Client Interface is the normal private mailbox interface.
 
-Inbucket is an SMTP receiver, not an outbound SMTP client. This package does
-not use StartOS outbound SMTP credentials or forward received mail externally.
+Internet MX delivery requires external TCP port 25 to reach the Inbound SMTP
+interface. An HTTP reverse proxy cannot transport SMTP.
 
-## Security behavior
+## Installation and First-Run Flow
 
-The client renders untrusted HTML only after sanitization. Its CSP does not
-allow third-party image loads or `cid:` URLs. CID images are fetched through an
-authenticated same-origin endpoint and only supported raster formats are
-returned. Attachments are authenticated downloads with their declared MIME
-type, `Content-Disposition: attachment`, and `X-Content-Type-Options: nosniff`.
-PDF, HTML, SVG, and other active content are not embedded. A PDF viewer remains
-a separate follow-up.
+1. Installation generates the client database password, Rails secret, and
+   administrator credentials.
+2. A critical task asks for the disposable mail domain and storage limits.
+3. Inbucket, PostgreSQL, database preparation, account synchronization, the
+   mailbox monitor, and the client start in dependency order.
+4. Use **Show Login Credentials** to sign in to the Web Client Interface.
+5. Configure DNS MX records and raw TCP forwarding separately.
 
-## Standalone Inbucket Client migration
+## Configuration Management
 
-The first integrated release starts with clean client state under the Inbucket
-package ID. It does not automatically move the standalone `inbucket-client`
-PostgreSQL volume, uninstall the standalone package, or promise a silent
-upgrade. Keep the standalone package installed until an export/import
-procedure for credentials and saved mailbox state has been validated on a
-non-production server.
+| Setting | StartOS input | Runtime behavior |
+| --- | --- | --- |
+| Recipient domain | Fully qualified domain | Sets accepted and stored SMTP domains |
+| Message retention | 15 minutes to 7 days | Deletes messages after the selected period |
+| Messages per mailbox | 1 to 10,000 | Deletes older messages when the cap is exceeded |
+| Maximum message size | 1 to 100 MiB, default 50 MiB | Sets the SMTP limit including headers and MIME encoding |
 
-After live migration validation and release verification, the standalone
-package can be marked deprecated in its documentation and registry listing.
+The package fixes mailbox naming to local parts, stores mail under `/storage`,
+disables default acceptance and storage for other domains, and binds upstream
+POP3 only on loopback.
 
-## Development
+## Actions
 
-```sh
-npm ci
-npm run check
-npm run build
-node node_modules/@start9labs/start-sdk/lint.mjs
-bundle exec rspec
-make arches
+| Action | Purpose | Availability | Result |
+| --- | --- | --- | --- |
+| Configure Inbucket | Changes recipient domain, retention, mailbox cap, and SMTP size limit | Any status | Saves settings for the next service application |
+| Show Login Credentials | Displays generated Web Client credentials | Any status | Copyable username and masked password |
+| Refresh Login Password | Replaces the client password and restarts the service | Any status | Copyable username and new masked password |
+
+Refreshing the password invalidates every existing Web Client session.
+
+## Tasks
+
+The package raises a critical **Configure Inbucket** task until a valid domain
+has been saved. Inbound SMTP does not start without that configuration.
+
+## Health Checks
+
+| Check | Method | Observable result |
+| --- | --- | --- |
+| Admin Web Interface | Port 9000 listening | Upstream web service is ready |
+| Inbound SMTP | Port 2500 listening | SMTP receiver is ready |
+| Client Database | `pg_isready` | PostgreSQL accepts the client database connection |
+| Client Monitor | Readiness file | Monitor event loop reached its running state |
+| Web Client Interface | `GET /up` | Rails client and database are available |
+
+Checks remain separate so a client failure does not hide the state of upstream
+Inbucket or inbound SMTP.
+
+## Backups and Restore
+
+Backups include the complete `main` and `client-config` volumes plus a
+PostgreSQL dump of `client-postgres`. Generated credentials are stored in
+`store.json` on `main`; authenticated client records are restored from the
+database dump.
+
+The standalone `inbucket-client` package uses a different package ID, so
+StartOS cannot silently move its PostgreSQL volume into this package. Keep the
+standalone package until an export and import procedure has been validated.
+
+## Limitations and Differences
+
+1. Inbucket receives mail but does not send or forward outbound mail.
+2. The Admin Web Interface and REST API have upstream's unauthenticated mailbox
+   access and should remain on trusted addresses.
+3. The authenticated client renders email in a sanitized, sandboxed iframe.
+   Remote images are blocked until explicitly loaded for the active message.
+4. CID rendering is limited to AVIF, GIF, JPEG, PNG, and WebP. Attachments are
+   forced downloads; HTML, SVG, PDF, and other active types are not embedded.
+5. MIME warnings from the internal upstream web UI route are not proxied. View
+   Source remains the stable diagnostic path.
+6. Client state from the standalone package is not migrated automatically.
+
+## What Is Unchanged from Upstream
+
+- SMTP receiving and domain policy;
+- enmime parsing and body selection;
+- file-backed message storage;
+- upstream Admin Web Interface;
+- REST API v1;
+- POP3 behavior inside the package network;
+- upstream retention and mailbox-cap enforcement.
+
+## Contributing
+
+Report package bugs and feature requests in the
+[package repository](https://github.com/alextab93/inbucket-startos/issues).
+General Inbucket behavior belongs in the
+[upstream repository](https://github.com/inbucket/inbucket/issues).
+
+---
+
+## Quick Reference for AI Consumers
+
+```yaml
+package_id: inbucket
+upstream_version: 3.1.1
+upstream_commit: 6eff554469f681ab99f540fc440e24e06a7be636
+architectures: [x86_64, aarch64]
+volumes:
+  main: [/config, /storage]
+  client-config: reserved StartOS-managed files
+  client-postgres: /var/lib/postgresql/data
+ports:
+  client: 3000
+  ui: 9000
+  rest-api: 9000
+  smtp: 2500
+dependencies: none
+startos_managed_env_vars:
+  - INBUCKET_SMTP_DOMAIN
+  - INBUCKET_SMTP_MAXMESSAGEBYTES
+  - INBUCKET_STORAGE_RETENTIONPERIOD
+  - INBUCKET_STORAGE_MAILBOXMSGCAP
+actions:
+  - configure-domain
+  - show-credentials
+  - refresh-login-password
 ```
-
-The Rails request and service specs require a real PostgreSQL test database.
-Build package architectures serially from a clean signed commit and inspect
-each S9PK manifest and commitment before publishing.

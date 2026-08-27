@@ -16,14 +16,14 @@ import {
 export const main = sdk.setupMain(async ({ effects }) => {
   const config = await storeJson.read((store) => store).const(effects)
   if (!config?.domain)
-    throw new Error('Disposable mail domain is not configured')
+    throw new Error(i18n('Disposable mail domain is not configured'))
   if (
     !config.databasePassword ||
     !config.secretKeyBase ||
     !config.adminUsername ||
     !config.adminPassword
   ) {
-    throw new Error('Inbucket client secrets have not been initialized')
+    throw new Error(i18n('Inbucket client secrets have not been initialized'))
   }
 
   const inbucketAddress = await sdk.host
@@ -34,7 +34,8 @@ export const main = sdk.setupMain(async ({ effects }) => {
       ssl: false,
     })
     .const()
-  if (!inbucketAddress) throw new Error('Inbucket web host is not available')
+  if (!inbucketAddress)
+    throw new Error(i18n('Inbucket web host is not available'))
 
   const clientEnv = {
     DATABASE_URL: `postgresql://${databaseUser}:${config.databasePassword}@127.0.0.1:5432/${databaseName}`,
@@ -85,11 +86,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
         }),
       },
       ready: {
-        display: 'Admin Web Interface',
+        display: i18n('Admin Web Interface'),
         fn: () =>
           sdk.healthCheck.checkPortListening(effects, webPort, {
-            successMessage: 'The admin web interface is ready',
-            errorMessage: 'The admin web interface is not ready',
+            successMessage: i18n('The admin web interface is ready'),
+            errorMessage: i18n('The admin web interface is not ready'),
           }),
       },
       requires: [],
@@ -117,7 +118,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
         },
       },
       ready: {
-        display: 'Client Database',
+        display: i18n('Client Database'),
         fn: () =>
           sdk.healthCheck.runHealthScript(
             [
@@ -131,8 +132,8 @@ export const main = sdk.setupMain(async ({ effects }) => {
             ],
             postgresSubcontainer,
             {
-              errorMessage: 'The client database is not ready',
-              message: () => 'The client database is ready',
+              errorMessage: i18n('The client database is not ready'),
+              message: () => i18n('The client database is ready'),
             },
           ),
       },
@@ -162,14 +163,14 @@ export const main = sdk.setupMain(async ({ effects }) => {
         env: clientEnv,
       },
       ready: {
-        display: 'Client Monitor',
+        display: i18n('Client Monitor'),
         fn: () =>
           sdk.healthCheck.runHealthScript(
             ['test', '-f', '/tmp/inbucket-monitor-ready'],
             clientSubcontainer,
             {
-              errorMessage: 'The client monitor is not ready',
-              message: () => 'The client monitor is ready',
+              errorMessage: i18n('The client monitor is not ready'),
+              message: () => i18n('The client monitor is ready'),
             },
           ),
       },
@@ -182,14 +183,14 @@ export const main = sdk.setupMain(async ({ effects }) => {
         env: clientEnv,
       },
       ready: {
-        display: 'Web Client Interface',
+        display: i18n('Web Client Interface'),
         fn: () =>
           sdk.healthCheck.checkWebUrl(
             effects,
             `http://127.0.0.1:${clientPort}/up`,
             {
-              successMessage: 'The web client interface is ready',
-              errorMessage: 'The web client interface is not ready',
+              successMessage: i18n('The web client interface is ready'),
+              errorMessage: i18n('The web client interface is not ready'),
             },
           ),
       },

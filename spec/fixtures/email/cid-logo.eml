@@ -1,0 +1,17 @@
+From: Sender <sender@example.com>
+To: Inbox <inbox@example.test>
+Subject: CID logo
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="related"
+
+--related
+Content-Type: text/html; charset=UTF-8
+
+<p>Inline logo</p><img src="cid:logo.png" alt="Logo">
+--related
+Content-Type: image/png
+Content-ID: <logo.png>
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=
+--related--

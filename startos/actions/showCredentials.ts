@@ -1,13 +1,17 @@
 import { storeJson } from '../fileModels/store.json'
+import { i18n } from '../i18n'
 import { sdk } from '../sdk'
 
 export const showCredentials = sdk.Action.withoutInput(
   'show-credentials',
   {
-    name: 'Show Login Credentials',
-    description:
+    name: i18n('Show Login Credentials'),
+    description: i18n(
       'Display the generated username and password for the web interface.',
-    warning: 'Anyone with these credentials can read every Inbucket mailbox.',
+    ),
+    warning: i18n(
+      'Anyone with these credentials can read every Inbucket mailbox.',
+    ),
     allowedStatuses: 'any',
     group: null,
     visibility: 'enabled',
@@ -15,19 +19,19 @@ export const showCredentials = sdk.Action.withoutInput(
   async ({ effects }) => {
     const saved = await storeJson.read().const(effects)
     if (!saved?.adminUsername || !saved.adminPassword) {
-      throw new Error('Login credentials are not initialized')
+      throw new Error(i18n('Login credentials are not initialized'))
     }
 
     return {
       version: '1',
-      title: 'Inbucket Login Credentials',
-      message: 'Use these credentials to sign in to the Inbucket Client.',
+      title: i18n('Inbucket Login Credentials'),
+      message: i18n('Use these credentials to sign in to the Inbucket Client.'),
       result: {
         type: 'group' as const,
         value: [
           {
             type: 'single' as const,
-            name: 'Username',
+            name: i18n('Username'),
             description: null,
             value: saved.adminUsername,
             copyable: true,
@@ -36,7 +40,7 @@ export const showCredentials = sdk.Action.withoutInput(
           },
           {
             type: 'single' as const,
-            name: 'Password',
+            name: i18n('Password'),
             description: null,
             value: saved.adminPassword,
             copyable: true,

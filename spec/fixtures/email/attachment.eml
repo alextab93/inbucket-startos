@@ -1,0 +1,17 @@
+From: Sender <sender@example.com>
+To: Inbox <inbox@example.test>
+Subject: Attachment
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mixed"
+
+--mixed
+Content-Type: text/plain; charset=UTF-8
+
+The requested file is attached.
+--mixed
+Content-Type: application/pdf; name="example.pdf"
+Content-Disposition: attachment; filename="example.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJSVFT0YK
+--mixed--

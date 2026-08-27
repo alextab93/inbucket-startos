@@ -1,0 +1,7 @@
+From: Sender <sender@example.com>
+To: Inbox <inbox@example.test>
+Subject: Remote images
+MIME-Version: 1.0
+Content-Type: text/html; charset=UTF-8
+
+<style>.banner{background-image:url(https://images.example.com/banner.png)}</style><div class="banner"><img src="https://images.example.com/tracker.gif" width="1" height="1" alt=""><p>Remote content test</p></div>

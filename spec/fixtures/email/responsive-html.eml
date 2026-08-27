@@ -1,0 +1,7 @@
+From: Sender <sender@example.com>
+To: Inbox <inbox@example.test>
+Subject: Responsive HTML
+MIME-Version: 1.0
+Content-Type: text/html; charset=UTF-8
+
+<style>.card{width:560px}@media(max-width:600px){.card{width:100%}}</style><div class="card" style="padding:24px;background:#f4f4f5"><a href="https://example.com/verify" style="display:inline-block;padding:12px 18px;background:#2563eb;color:#fff">Verify account</a></div>

@@ -10,6 +10,8 @@ RSpec.describe "Session flow", type: :request do
 
     expect(response).to have_http_status(:ok)
     expect(response.parsed_body).to include("authenticated" => true, "username" => "admin")
+    expect(response.headers["Cache-Control"]).to eq("private, no-store")
+    expect(response.headers["Set-Cookie"].downcase).to include("httponly", "samesite=lax")
 
     get "/v1/session"
 
@@ -40,6 +42,16 @@ RSpec.describe "Session flow", type: :request do
     get "/v1/session"
 
     expect(response).to have_http_status(:unauthorized)
+  end
+
+  it "rejects a cross-origin sign-in request" do
+    post "/v1/session",
+         params: { username: "admin", password: "correct horse battery staple" }.to_json,
+         headers: json_headers.merge("ORIGIN" => "https://attacker.example")
+
+    expect(response).to have_http_status(:forbidden)
+    expect(response.parsed_body).to eq("error" => "origin_not_allowed")
+    expect(response.headers["Set-Cookie"]).to be_nil
   end
 
   def json_headers

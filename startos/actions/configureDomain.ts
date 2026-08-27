@@ -87,7 +87,7 @@ export const configureDomain = sdk.Action.withInput(
   async ({ effects, input }) => {
     const domain = input.domain.trim().toLowerCase()
     if (!domainRegex.test(domain)) {
-      throw new Error('Invalid disposable mail domain')
+      throw new Error(i18n('Invalid disposable mail domain'))
     }
     await storeJson.merge(effects, {
       domain,

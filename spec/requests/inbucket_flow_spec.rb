@@ -236,6 +236,18 @@ RSpec.describe "Inbucket flow", type: :request do
     expect(response).to have_http_status(:not_found)
   end
 
+  it "keeps a malformed but displayable message usable" do
+    authenticate
+    source = Rails.root.join("spec/fixtures/email/malformed-but-displayable.eml").read
+    stub_request(:get, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}/#{message_id}/source")
+      .to_return(status: 200, body: source, headers: { "Content-Type" => "text/plain" })
+
+    get "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}/attachments"
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to eq([])
+  end
+
   it "deletes a message" do
     authenticate
     stub_request(:delete, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}/#{message_id}")

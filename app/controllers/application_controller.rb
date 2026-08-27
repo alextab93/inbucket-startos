@@ -4,6 +4,7 @@ class ApplicationController < ActionController::API
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
   rescue_from ActionController::ParameterMissing, with: :render_invalid_request
 
+  before_action :set_private_cache_headers
   before_action :validate_browser_origin, if: :state_changing_request?
 
   private
@@ -46,6 +47,11 @@ class ApplicationController < ActionController::API
 
   def state_changing_request?
     !request.get? && !request.head? && !request.options?
+  end
+
+  def set_private_cache_headers
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Pragma"] = "no-cache"
   end
 
   def render_not_found

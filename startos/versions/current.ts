@@ -1,18 +1,18 @@
 import { IMPOSSIBLE, VersionInfo } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '3.1.1:6',
+  version: '3.1.1:7',
   releaseNotes: {
     en_US:
-      'Adds a configurable maximum SMTP message size from 1 to 100 MiB, with a 50 MiB default for existing installations.',
+      'Improves StartOS localization, client response protections, package workflows, documentation, and non-sensitive email regression coverage.',
     es_ES:
-      'Añade un tamaño máximo configurable para los mensajes SMTP de 1 a 100 MiB, con un valor predeterminado de 50 MiB para las instalaciones existentes.',
+      'Mejora la localización de StartOS, las protecciones de respuesta del cliente, los flujos del paquete, la documentación y la cobertura de regresión de correos no sensibles.',
     de_DE:
-      'Fügt eine konfigurierbare maximale SMTP-Nachrichtengröße von 1 bis 100 MiB hinzu, mit einem Standardwert von 50 MiB für bestehende Installationen.',
+      'Verbessert die StartOS-Lokalisierung, den Schutz der Client-Antworten, Paketabläufe, Dokumentation und nicht sensible E-Mail-Regressionstests.',
     pl_PL:
-      'Dodaje konfigurowalny maksymalny rozmiar wiadomości SMTP od 1 do 100 MiB, z wartością domyślną 50 MiB dla istniejących instalacji.',
+      'Ulepsza lokalizację StartOS, ochronę odpowiedzi klienta, przepływy pakietu, dokumentację i niesensytywne testy regresji wiadomości.',
     fr_FR:
-      'Ajoute une taille maximale configurable de 1 à 100 Mio pour les messages SMTP, avec une valeur par défaut de 50 Mio pour les installations existantes.',
+      'Améliore la localisation StartOS, la protection des réponses du client, les flux du paquet, la documentation et les tests de régression avec des courriels non sensibles.',
   },
   migrations: {
     up: async ({ effects }) => {},

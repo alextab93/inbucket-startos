@@ -10,10 +10,11 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
   })
 
   const adminWebUi = sdk.createInterface(effects, {
-    name: 'Admin Web Interface',
+    name: i18n('Admin Web Interface'),
     id: 'ui',
-    description:
+    description: i18n(
       'Upstream Inbucket webmail, server status, and diagnostics without mailbox authentication',
+    ),
     type: 'ui',
     masked: false,
     schemeOverride: null,
@@ -47,10 +48,11 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
   })
 
   const client = sdk.createInterface(effects, {
-    name: 'Web Client Interface',
+    name: i18n('Web Client Interface'),
     id: 'client',
-    description:
+    description: i18n(
       'Authenticated mailbox reading, monitoring, source viewing, CID images, and attachment downloads',
+    ),
     type: 'ui',
     masked: false,
     schemeOverride: null,
