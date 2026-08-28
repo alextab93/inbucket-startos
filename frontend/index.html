@@ -44,6 +44,30 @@
           <div><h2 id="monitor-title">Realtime monitor</h2><p>Recent deliveries from the Inbucket monitor. Message bodies are not stored here.</p></div>
           <p id="monitor-status" class="status-message" role="status" aria-live="polite"></p>
         </div>
+        <div class="monitor-tools">
+          <input id="monitor-search" type="search" aria-label="Search monitored messages" placeholder="Search monitored messages">
+          <div id="monitor-filter-control" class="list-filter-control">
+            <button id="monitor-filter-trigger" class="list-filter-trigger" type="button" aria-label="Filter and sort monitored messages" title="Filter and sort monitored messages" aria-expanded="false" aria-controls="monitor-filter-panel">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                <path d="M4 6h16M7 12h10M10 18h4"></path>
+              </svg>
+            </button>
+            <div id="monitor-filter-panel" class="list-filter-popover" hidden>
+              <fieldset class="list-filter-section">
+                <legend>Filter</legend>
+                <label class="list-filter-option"><input id="monitor-filter-read" type="checkbox"><span>Read</span></label>
+                <label class="list-filter-option"><input id="monitor-filter-unread" type="checkbox"><span>Unread</span></label>
+              </fieldset>
+              <fieldset class="list-filter-section">
+                <legend>Sort by</legend>
+                <label class="list-filter-option"><input type="radio" name="monitor-sort" value="newest" checked><span>Newest first</span></label>
+                <label class="list-filter-option"><input type="radio" name="monitor-sort" value="oldest"><span>Oldest first</span></label>
+                <label class="list-filter-option"><input type="radio" name="monitor-sort" value="largest"><span>Largest first</span></label>
+                <label class="list-filter-option"><input type="radio" name="monitor-sort" value="smallest"><span>Smallest first</span></label>
+              </fieldset>
+            </div>
+          </div>
+        </div>
         <div id="monitor-message-list" class="monitor-message-list"></div>
       </section>
       <section id="archive-view" class="archive-view" aria-labelledby="archived-mailboxes-title" hidden>
@@ -85,7 +109,31 @@
         </div>
         <div class="mailbox-layout">
           <section class="message-list-panel" aria-labelledby="mailbox-title">
-            <h2 id="mailbox-title">Messages</h2>
+            <div class="message-list-heading">
+              <h2 id="mailbox-title">Messages</h2>
+              <input id="message-search" type="search" aria-label="Search messages" placeholder="Search messages">
+              <div id="message-filter-control" class="list-filter-control">
+                <button id="message-filter-trigger" class="list-filter-trigger" type="button" aria-label="Filter and sort messages" title="Filter and sort messages" aria-expanded="false" aria-controls="message-filter-panel">
+                  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                    <path d="M4 6h16M7 12h10M10 18h4"></path>
+                  </svg>
+                </button>
+                <div id="message-filter-panel" class="list-filter-popover" hidden>
+                  <fieldset class="list-filter-section">
+                    <legend>Filter</legend>
+                    <label class="list-filter-option"><input id="message-filter-read" type="checkbox"><span>Read</span></label>
+                    <label class="list-filter-option"><input id="message-filter-unread" type="checkbox"><span>Unread</span></label>
+                  </fieldset>
+                  <fieldset class="list-filter-section">
+                    <legend>Sort by</legend>
+                    <label class="list-filter-option"><input type="radio" name="message-sort" value="newest" checked><span>Newest first</span></label>
+                    <label class="list-filter-option"><input type="radio" name="message-sort" value="oldest"><span>Oldest first</span></label>
+                    <label class="list-filter-option"><input type="radio" name="message-sort" value="largest"><span>Largest first</span></label>
+                    <label class="list-filter-option"><input type="radio" name="message-sort" value="smallest"><span>Smallest first</span></label>
+                  </fieldset>
+                </div>
+              </div>
+            </div>
             <div id="message-list" class="message-list"></div>
           </section>
           <article id="message-panel" class="message-panel" aria-labelledby="message-subject">

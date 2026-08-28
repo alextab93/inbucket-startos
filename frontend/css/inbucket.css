@@ -147,6 +147,30 @@
   color:var(--muted)
 }
 
+.monitor-tools {
+  display:flex;
+  gap:12px;
+  max-width:720px;
+  margin-top:20px
+}
+
+.monitor-tools input {
+  min-width:0;
+  width:100%;
+  padding:9px 11px;
+  color:var(--ink);
+  border:1px solid #94a3b8;
+  border-radius:8px;
+  background:#fff;
+  font:inherit
+}
+
+.monitor-tools input:focus {
+  border-color:var(--blue);
+  outline:2px solid color-mix(in srgb,var(--blue) 24%,transparent);
+  outline-offset:1px
+}
+
 .monitor-message-list {
   display:grid;
   gap:1px;
@@ -157,16 +181,41 @@
 }
 
 .monitor-message {
+  position:relative;
   display:grid;
   grid-template-columns:minmax(140px,.7fr) minmax(180px,1fr) minmax(160px,.8fr) minmax(0,1.5fr);
   gap:14px;
-  padding:14px;
+  padding:14px 38px 14px 14px;
   color:var(--ink);
   border:0;
   background:#fff;
   font:inherit;
   text-align:left;
   cursor:pointer
+}
+
+.monitor-message.unread {
+  background:#f8fbff
+}
+
+.monitor-message.unread::after {
+  position:absolute;
+  top:50%;
+  right:16px;
+  width:9px;
+  height:9px;
+  border-radius:50%;
+  background:var(--blue);
+  content:"";
+  transform:translateY(-50%)
+}
+
+.monitor-message.unread .monitor-message-subject {
+  font-weight:800
+}
+
+.monitor-message.read .monitor-message-subject {
+  font-weight:600
 }
 
 .monitor-message:hover {
@@ -370,11 +419,152 @@
   background:var(--wash)
 }
 
-.message-list-panel h2 {
+.message-list-heading {
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding:14px 16px 14px 22px;
+  border-bottom:1px solid var(--line)
+}
+
+.message-list-heading h2 {
+  flex:0 0 auto;
   margin:0;
-  padding:20px 22px;
-  border-bottom:1px solid var(--line);
   font-size:1.1rem
+}
+
+.message-list-heading input {
+  min-width:0;
+  width:100%;
+  padding:9px 11px;
+  color:var(--ink);
+  border:1px solid #94a3b8;
+  border-radius:8px;
+  background:#fff;
+  font:inherit
+}
+
+.message-list-heading input:focus {
+  border-color:var(--blue);
+  outline:2px solid color-mix(in srgb,var(--blue) 24%,transparent);
+  outline-offset:1px
+}
+
+.list-filter-control {
+  position:relative;
+  flex:0 0 auto
+}
+
+.list-filter-trigger {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:40px;
+  min-height:40px;
+  padding:0;
+  color:var(--ink);
+  border:1px solid #94a3b8;
+  border-radius:10px;
+  background:#fff;
+  font:inherit;
+  font-weight:700;
+  cursor:pointer
+}
+
+.list-filter-trigger svg {
+  width:18px;
+  height:18px;
+  fill:none;
+  stroke:currentColor;
+  stroke-linecap:round;
+  stroke-width:1.8
+}
+
+.list-filter-trigger:hover,.list-filter-trigger[aria-expanded="true"] {
+  border-color:var(--blue)
+}
+
+.list-filter-trigger[data-active="true"] {
+  border-color:var(--blue);
+  background:#eff6ff
+}
+
+.list-filter-popover {
+  position:absolute;
+  z-index:10;
+  top:calc(100%+10px);
+  right:0;
+  width:290px;
+  max-width:calc(100vw - 32px);
+  max-height:min(520px,calc(100dvh - 120px));
+  overflow:auto;
+  color:var(--ink);
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#fff;
+  box-shadow:0 18px 48px rgba(15,23,42,.2)
+}
+
+.list-filter-section {
+  display:grid;
+  gap:2px;
+  min-width:0;
+  margin:0;
+  padding:18px;
+  border:0
+}
+
+.list-filter-section+.list-filter-section {
+  border-top:1px solid var(--line)
+}
+
+.list-filter-section legend {
+  width:100%;
+  margin:0;
+  padding:0 0 8px;
+  font-size:1rem;
+  font-weight:800
+}
+
+.list-filter-option {
+  position:relative;
+  display:block;
+  cursor:pointer
+}
+
+.list-filter-option input {
+  position:absolute;
+  width:1px;
+  height:1px;
+  opacity:0
+}
+
+.list-filter-option span {
+  position:relative;
+  display:block;
+  padding:10px 38px 10px 8px;
+  border-radius:8px
+}
+
+.list-filter-option:hover span {
+  background:var(--wash)
+}
+
+.list-filter-option input:focus-visible+span {
+  outline:2px solid var(--blue);
+  outline-offset:1px
+}
+
+.list-filter-option input:checked+span::after {
+  position:absolute;
+  top:50%;
+  right:12px;
+  width:12px;
+  height:6px;
+  border-bottom:2px solid var(--blue);
+  border-left:2px solid var(--blue);
+  content:"";
+  transform:translateY(-65%) rotate(-45deg)
 }
 
 .message-list {
@@ -657,6 +847,26 @@
 
   .monitor-heading {
     flex-direction:column
+  }
+
+  .monitor-tools {
+    max-width:none
+  }
+
+  .message-list-heading {
+    flex-wrap:wrap;
+  }
+
+  .message-list-heading h2 {
+    width:100%;
+  }
+
+  .message-list-heading input,.monitor-tools input {
+    flex:1
+  }
+
+  .list-filter-popover {
+    max-height:calc(100dvh - 112px)
   }
 
   .monitor-message {

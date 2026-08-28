@@ -1,5 +1,6 @@
 import { nodes } from './dom'
 import { renderEmailBody } from './email-renderer'
+import { createListControls } from './list-controls'
 import { state } from './state'
 import {
   attachmentPath,
@@ -19,6 +20,22 @@ import {
 let loadMailboxes = async () => {}
 let handleUnauthorized = () => {}
 let bodyRenderer
+let messageControls
+
+const messageTimestamp = (message) => {
+  if (message['posix-millis'] !== undefined) {
+    const timestamp = Number(message['posix-millis'])
+    if (Number.isFinite(timestamp)) return String(timestamp)
+  }
+  const timestamp = Date.parse(message.date)
+  return Number.isFinite(timestamp) ? String(timestamp) : ''
+}
+
+const messageSize = (message) => {
+  if (message.size === undefined || message.size === null) return ''
+  const size = Number(message.size)
+  return Number.isFinite(size) ? String(size) : ''
+}
 
 const setMessageRead = (mailbox, id) => {
   const button = [
@@ -33,6 +50,7 @@ const setMessageRead = (mailbox, id) => {
   button.classList.add('read')
   button.dataset.read = 'true'
   button.setAttribute('aria-label', `Read: ${button.dataset.accessibleSummary}`)
+  messageControls?.apply()
 }
 
 const markMessageRead = async (mailbox, id) => {
@@ -48,7 +66,24 @@ const markMessageRead = async (mailbox, id) => {
 export const configureMessages = (options) => {
   loadMailboxes = options.loadMailboxes
   handleUnauthorized = options.handleUnauthorized
+  messageControls = createListControls({
+    control: nodes.messageFilterControl,
+    trigger: nodes.messageFilterTrigger,
+    panel: nodes.messageFilterPanel,
+    search: nodes.messageSearch,
+    readFilter: nodes.messageFilterRead,
+    unreadFilter: nodes.messageFilterUnread,
+    sortInputs: nodes.messageFilterPanel.querySelectorAll(
+      'input[name="message-sort"]',
+    ),
+    container: nodes.messageList,
+    itemSelector: '.message-summary',
+    emptyClass: 'message-filter-empty',
+    noun: 'messages',
+  })
 }
+
+export const closeMessageFilter = () => messageControls?.close()
 
 const renderAttachments = (attachments, mailbox, id) => {
   nodes.messageAttachmentList.replaceChildren()
@@ -173,31 +208,46 @@ export const renderMessageList = (messages) => {
     )
     return
   }
-  for (const message of messages) {
+  messages.forEach((message, index) => {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'message-summary'
     button.dataset.messageId = String(message.id)
     button.dataset.mailbox = message.mailbox
-    button.dataset.read = message.read ? 'true' : 'false'
-    button.classList.add(message.read ? 'read' : 'unread')
+    const read = message.seen === true
+    button.dataset.read = read ? 'true' : 'false'
+    button.dataset.timestamp = messageTimestamp(message)
+    button.dataset.size = messageSize(message)
+    button.dataset.renderOrder = String(index)
+    button.classList.add(read ? 'read' : 'unread')
     const subject = document.createElement('strong')
     subject.textContent = formatValue(message.subject) || '(No subject)'
     const sender = document.createElement('span')
     sender.textContent = formatValue(message.from) || 'Unknown sender'
     const date = document.createElement('time')
     date.textContent = dateText(message.date)
+    button.dataset.searchText = [
+      subject.textContent,
+      sender.textContent,
+      formatValue(message.to),
+      message.mailbox,
+      date.textContent,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLocaleLowerCase()
     button.dataset.accessibleSummary = `${subject.textContent}, ${sender.textContent}, ${date.textContent}`
     button.setAttribute(
       'aria-label',
-      `${message.read ? 'Read' : 'Unread'}: ${button.dataset.accessibleSummary}`,
+      `${read ? 'Read' : 'Unread'}: ${button.dataset.accessibleSummary}`,
     )
     button.append(subject, sender, date)
     button.addEventListener('click', () =>
       selectMessage(message.mailbox, message.id),
     )
     nodes.messageList.append(button)
-  }
+  })
+  messageControls?.apply()
 }
 
 export const toggleSource = async () => {

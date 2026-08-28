@@ -1,12 +1,14 @@
 import { nodes } from './inbucket/dom'
 import { configureMailboxTools } from './inbucket/mailbox-tools'
 import { archiveSelectedMailboxes, clearMailboxes, configureMailboxes, deleteSelectedMailboxes, loadMailboxes, refreshMailboxCatalog, selectAllMailboxes } from './inbucket/mailboxes'
-import { configureMessages, deleteMessage, toggleSource } from './inbucket/messages'
-import { configureMonitor, refreshMonitorMessages } from './inbucket/monitor'
+import { closeMessageFilter, configureMessages, deleteMessage, toggleSource } from './inbucket/messages'
+import { closeMonitorFilter, configureMonitor, refreshMonitorMessages } from './inbucket/monitor'
 import { replaceSelectedMailboxes, state } from './inbucket/state'
 import { request, setStatus, updateLocation } from './inbucket/shared'
 
 const showAccessScreen = (message, stateName = 'signed-out') => {
+  closeMessageFilter()
+  closeMonitorFilter()
   nodes.mailboxView.hidden = true
   nodes.appNavigation.hidden = true
   nodes.signOut.hidden = true
@@ -33,6 +35,8 @@ const handleUnauthorized = () => {
 }
 
 const showView = (view) => {
+  closeMessageFilter()
+  closeMonitorFilter()
   nodes.monitorView.hidden = view !== 'monitor'
   nodes.archiveView.hidden = view !== 'archive'
   nodes.mailboxesView.hidden = view !== 'mailboxes'

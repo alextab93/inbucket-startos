@@ -43,45 +43,48 @@ RSpec.describe "Inbucket flow", type: :request do
     expect(response.parsed_body).to eq("error" => "unauthorized")
   end
 
-  it "maps an unseen upstream message to unread mailbox contents" do
+  it "returns upstream message headers with their seen state" do
     authenticate
     stub_json("/api/v1/mailbox/#{mailbox}", messages)
 
     get "/v1/inbucket/mailbox", params: { name: mailbox }
 
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body).to eq(JSON.parse(messages.to_json).map { |item| item.merge("read" => false) })
+    expect(response.parsed_body).to eq(JSON.parse(messages.to_json))
     expect(response.headers["Cache-Control"]).to eq("private, no-store")
   end
 
-  it "maps a seen upstream message to read mailbox contents" do
+  it "returns a seen upstream message without a duplicate read field" do
     authenticate
     stub_json("/api/v1/mailbox/#{mailbox}", [{ **messages.first, seen: true }])
 
     get "/v1/inbucket/mailboxes/#{mailbox}"
 
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body.first).to include("seen" => true, "read" => true)
+    expect(response.parsed_body.first).to include("seen" => true)
+    expect(response.parsed_body.first).not_to have_key("read")
   end
 
-  it "does not infer read state from a missing upstream seen value" do
+  it "does not add state when upstream omits seen" do
     authenticate
     stub_json("/api/v1/mailbox/#{mailbox}", [messages.first.except(:seen)])
 
     get "/v1/inbucket/mailboxes/#{mailbox}"
 
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body.first).to include("read" => false)
+    expect(response.parsed_body.first).not_to have_key("seen")
+    expect(response.parsed_body.first).not_to have_key("read")
   end
 
-  it "does not infer read state from a malformed upstream seen value" do
+  it "preserves a malformed upstream seen value without adding state" do
     authenticate
     stub_json("/api/v1/mailbox/#{mailbox}", [{ **messages.first, seen: "true" }])
 
     get "/v1/inbucket/mailboxes/#{mailbox}"
 
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body.first).to include("seen" => "true", "read" => false)
+    expect(response.parsed_body.first).to include("seen" => "true")
+    expect(response.parsed_body.first).not_to have_key("read")
   end
 
   it "marks a message seen through the upstream API" do
@@ -190,14 +193,37 @@ RSpec.describe "Inbucket flow", type: :request do
     expect(response.parsed_body).to eq([{ "name" => "alerts", "message_count" => 0 }])
   end
 
-  it "returns recent monitor message summaries" do
+  it "returns recent monitor message summaries with current upstream seen state" do
     authenticate
     MonitorMessage.record(monitor_header)
+    unread_header = monitor_header.merge("id" => "20260811T120000-0002", "subject" => "Unread alert")
+    MonitorMessage.record(unread_header)
+    stub_json(
+      "/api/v1/mailbox/#{mailbox}",
+      [
+        { id: message_id, seen: true },
+        { id: unread_header.fetch("id"), seen: false }
+      ]
+    )
 
     get "/v1/inbucket/monitor/messages"
 
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body).to include(monitor_header)
+    messages_by_id = response.parsed_body.index_by { |message| message.fetch("id") }
+    expect(messages_by_id.fetch(message_id)).to include(monitor_header.merge("seen" => true))
+    expect(messages_by_id.fetch(unread_header.fetch("id"))).to include(unread_header.merge("seen" => false))
+  end
+
+  it "does not return false monitor seen indicators when upstream fails" do
+    authenticate
+    MonitorMessage.record(monitor_header)
+    stub_request(:get, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}")
+      .to_return(status: 500, body: "failed")
+
+    get "/v1/inbucket/monitor/messages"
+
+    expect(response).to have_http_status(:bad_gateway)
+    expect(response.parsed_body).to eq("error" => "inbucket_error")
   end
 
   it "archives a saved mailbox without purging its messages" do

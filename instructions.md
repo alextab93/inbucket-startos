@@ -64,9 +64,9 @@ Mail servers deliver to port 25, and StartOS publishes Inbucket's SMTP interface
 
 ### Web client interface
 
-Sign in, then use **Add mailbox** to open a mailbox name — the mailbox does not have to exist yet. Mailboxes you have opened are saved under **Manage mailboxes**, where you can select several, archive the ones you are done with, or delete them. The message list and selected message use the available browser height and scroll independently on larger screens.
+Sign in, then use **Add mailbox** to open a mailbox name. The mailbox does not have to exist yet. Mailboxes you have opened are saved under **Manage mailboxes**, where you can select several, archive the ones you are done with, or delete them. Use **Search messages** to filter the loaded messages by subject, sender, recipient, mailbox, or displayed date. Open **Filter** to show read or unread messages and sort the loaded list by newest, oldest, largest, or smallest. The message list and selected message use the available browser height and scroll independently on larger screens.
 
-The **Monitor** tab shows deliveries as they arrive across every mailbox, which is the quickest way to catch a message you are waiting on.
+The **Monitor** tab shows deliveries as they arrive across every mailbox, which is the quickest way to catch a message you are waiting on. Its search covers the displayed date, sender, recipient, mailbox, and subject. Its **Filter** control uses the same read state and sorting choices as the mailbox view.
 
 Unread messages have a blue dot and stronger subject text. Opening a message records it as read in Inbucket, while the blue left border continues to identify the message currently selected. The state is shared with other interfaces using Inbucket's API, retained across browser sessions, and included in backups.
 

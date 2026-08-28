@@ -50,7 +50,6 @@ export const loadMailboxes = async (mailboxes = selectedMailboxNames(), selected
     if (results.some((result) => result.unauthorized)) return handleUnauthorized()
     const failed = results.filter((result) => result.error)
     const messages = results.flatMap((result) => (result.messages || []).map((message) => ({ ...message, mailbox: result.mailbox })))
-    messages.sort((left, right) => new Date(right.date || 0) - new Date(left.date || 0))
     renderMessageList(messages)
     const summary = `${messages.length} ${messages.length === 1 ? 'message' : 'messages'} in ${names.length === 1 ? names[0] : `${names.length} mailboxes`}.`
     setStatus(nodes.mailboxStatus, failed.length ? `${summary} ${failed.map((result) => result.error).join(' ')}` : summary, failed.length ? 'error' : 'authenticated')
@@ -129,6 +128,7 @@ const renderArchivedMailboxCatalog = (mailboxes) => {
 }
 
 export const refreshMailboxCatalog = async () => {
+  if (nodes.mailboxView.hidden) return
   try {
     const response = await request('/v1/inbucket/mailboxes')
     if (response.status === 401) return handleUnauthorized()
