@@ -10,6 +10,8 @@ RSpec.describe "Session flow", type: :request do
 
     expect(response).to have_http_status(:ok)
     expect(response.parsed_body).to include("authenticated" => true, "username" => "admin")
+    expect(response.headers["Cache-Control"]).to eq("private, no-store")
+    expect(response.headers["Pragma"]).to eq("no-cache")
 
     get "/v1/session"
 

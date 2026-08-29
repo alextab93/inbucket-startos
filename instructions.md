@@ -35,10 +35,12 @@ If you are not sure, start with a `.test` name. Changing it later is one action.
 
 ## Getting set up
 
-1. Run **Configure Inbucket**. Enter the domain from above, and choose how long messages are kept and how many each mailbox holds.
+1. Run **Configure Inbucket**. Enter the domain from above, then choose how long messages are kept and how many each mailbox holds.
 2. Run **Set Admin Password** and save the username and password it gives you — the password is shown once.
 3. Start Inbucket. It will not start until both of the steps above are done, which is why they are the only things you can press at first.
 4. Open the **Web Client Interface** and sign in.
+
+On iPhone or iPad, open the Web Client Interface in Safari, use **Share**, then choose **Add to Home Screen**. The shortcut uses the Inbucket icon and opens without the normal Safari toolbar. It still needs a connection to your StartOS server. If you installed an older shortcut with a letter icon or browser toolbar, remove it and add it again after upgrading so iOS replaces its cached settings.
 
 At this point Inbucket works for anything on your own network. To receive mail from the internet, continue below.
 
@@ -64,15 +66,19 @@ Mail servers deliver to port 25, and StartOS publishes Inbucket's SMTP interface
 
 ### Web client interface
 
-Sign in, then type a mailbox name to open it — the mailbox does not have to exist yet. Mailboxes you have opened are saved to a list you can come back to, and you can archive the ones you are done with rather than deleting them.
+Sign in, then use **Add mailbox** to open a mailbox name. The mailbox does not have to exist yet. Mailboxes you have opened are saved under **Manage mailboxes**, where you can select several, archive the ones you are done with, or delete them. Use **Search messages** to filter the loaded messages by subject, sender, recipient, mailbox, or displayed date. Open **Filter** to show read or unread messages and sort the loaded list by newest, oldest, largest, or smallest. The message list and selected message use the available browser height and scroll independently on larger screens.
 
-The **Monitor** tab shows deliveries as they arrive across every mailbox, which is the quickest way to catch a message you are waiting on.
+The **Monitor** tab shows deliveries as they arrive across every mailbox, which is the quickest way to catch a message you are waiting on. Its search covers the displayed date, sender, recipient, mailbox, and subject. Its **Filter** control uses the same read state and sorting choices as the mailbox view.
 
-Opening a message shows the sanitized HTML body, or the plain text if there is none. Remote images are blocked; images the message carries with it are shown. **View source** shows the raw message, and attachments download rather than open in the browser.
+Unread messages have a blue dot and stronger subject text. Opening a message records it as read in Inbucket, while the blue left border continues to identify the message currently selected. The state is shared with other interfaces using Inbucket's API, retained across browser sessions, and included in backups.
+
+The **Archived** view reports when its catalog is loading, when mailbox counts are unavailable, and when a restore fails. Restoring only returns a mailbox to the active list. Permanent deletion remains a separate confirmed action under **Manage mailboxes**.
+
+Opening a message shows the sanitized HTML body with its supported layout and styles, or the plain text if there is no HTML body. Remote images are blocked by default. Use **Load remote images** when you trust the sender and want to retrieve them. Images carried inside the message are shown without that approval. **View source** shows the raw message, and attachments download rather than open in the browser.
 
 ### Actions
 
-- **Configure Inbucket** — changes the accepted domain (see **Choosing a domain**), how long messages are kept, and how many each mailbox holds. The form shows your current settings, and saving restarts Inbucket. Mailboxes collected under a previous domain keep their names and stay readable, but new mail for that domain is rejected, and lowering either limit deletes stored messages that no longer fit.
+- **Configure Inbucket:** Changes the accepted domain (see **Choosing a domain**), how long messages are kept, and how many each mailbox holds. The form shows your current settings, and saving restarts Inbucket. Mailboxes collected under a previous domain keep their names and stay readable, new mail for that domain is rejected, and lowering a storage limit deletes stored messages that no longer fit.
 - **Set Admin Password** — generates a new password for the Web Client Interface and shows it once. Run it again whenever you want a fresh password or have lost the one you had. Saving restarts Inbucket, and once it is back the old password no longer works and everyone signed in has been signed out.
 
 ## Limitations

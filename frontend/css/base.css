@@ -3,19 +3,23 @@
   --muted:#5f6b7a;
   --blue:#2563eb;
   --blue-dark:#1d4ed8;
-  --focus:#e11d48;
+  --focus:var(--blue);
   --navy:#0b1220;
   --line:#e3e8ef;
   --paper:#fff;
   --wash:#f5f7fa;
   --radius:18px;
-  --container:1160px;
+  --container:1600px;
   --shadow:0 18px 50px rgba(15,23,42,.08)
 }
 
 
 *,*::before,*::after {
   box-sizing:border-box
+}
+
+[hidden] {
+  display:none!important
 }
 
 html {

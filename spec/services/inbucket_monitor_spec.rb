@@ -14,6 +14,14 @@ RSpec.describe InbucketMonitor do
     expect(Mailbox.find_by(name: "start9-edge")).to be_nil
   end
 
+  it "does not restore an archived mailbox from a stored-message event" do
+    Mailbox.record("start9-edge").update!(archived: true)
+
+    described_class.record({ variant: "message-stored", header: { mailbox: "start9-edge" } }.to_json)
+
+    expect(Mailbox.find_by(name: "start9-edge")&.archived?).to be(true)
+  end
+
   it "stores a monitor message summary when the event includes an identifier" do
     payload = {
       variant: "message-stored",

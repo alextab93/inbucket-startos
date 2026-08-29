@@ -8,3 +8,5 @@ javascript
 ncc-cachepublic
 log/*
 tmp/*
+.ai-workspace/
+/public/

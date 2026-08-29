@@ -2,10 +2,14 @@ require "mail"
 
 module V1
   class InbucketMessagesController < InbucketController
-    INLINE_IMAGE_TYPES = %w[image/avif image/gif image/jpeg image/png image/webp].freeze
+    INLINE_IMAGE_TYPES = %w[image/avif image/bmp image/gif image/jpeg image/png image/webp].freeze
 
     def show
       render_upstream(inbucket.message(params.require(:name), params.require(:id)), json: true)
+    end
+
+    def mark_read
+      render_destroy_upstream(inbucket.mark_seen(params.require(:name), params.require(:id)))
     end
 
     def source
@@ -53,7 +57,9 @@ module V1
       name = params.require(:name)
       id = params.require(:id)
       upstream = inbucket.delete_message(name, id)
-      MonitorMessage.where(mailbox: name, message_id: id).destroy_all if upstream.status.between?(200, 299)
+      if upstream.status.between?(200, 299)
+        MonitorMessage.where(mailbox: name, message_id: id).destroy_all
+      end
       render_destroy_upstream(upstream)
     end
 

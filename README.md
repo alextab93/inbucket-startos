@@ -18,6 +18,7 @@ This package adds an authenticated mailbox client of its own alongside upstream,
 ## Table of Contents
 
 - [Image and Container Runtime](#image-and-container-runtime)
+- [Authenticated Client Architecture](#authenticated-client-architecture)
 - [Volume and Data Layout](#volume-and-data-layout)
 - [File Models](#file-models)
 - [Dependencies](#dependencies)
@@ -46,7 +47,133 @@ All three build for `x86_64` and `aarch64`.
 
 The `client` image is not a wrapper around anything upstream — it is a Rails API and a Vite-built browser frontend written for this package, backed by its own PostgreSQL. It exists because upstream Inbucket's webmail deliberately has no authentication: anyone who can reach it can read every mailbox. The client puts a login in front of the same data, which it reads through upstream's REST API and monitor websocket over loopback.
 
-Three subcontainers run: `inbucket` (upstream), `client-postgres`, and `client-app`. The last hosts three processes — the Puma web server, the monitor, and the two setup oneshots — in one subcontainer, so they share a filesystem. Attach with `start-cli package attach inbucket -n client-app`.
+Three subcontainers run: `inbucket` (upstream), `client-postgres`, and `client-app`. The last hosts the Puma web server, the monitor, and two setup oneshots in one subcontainer, so they share a filesystem. Attach with `start-cli package attach inbucket -n client-app`.
+
+## Authenticated Client Architecture
+
+The authenticated client is a client-rendered React 19.2 application. Rails serves its generated files and provides the private same-origin API. The browser never receives the authored TypeScript, tests, `node_modules`, database credentials, Rails signing key, or StartOS configuration. It receives inspectable compiled JavaScript, so the frontend uses relative paths and the HttpOnly session cookie instead of compiled configuration values.
+
+### Component hierarchy
+
+```text
+App
+├── AppHeader
+│   └── ViewNavigation
+├── AccessScreen
+└── AuthenticatedWorkspace
+    ├── MailboxesView
+    │   ├── MailboxTools
+    │   │   ├── AddMailbox
+    │   │   └── ManageMailboxes
+    │   └── MessageWorkspace
+    │       ├── ListControls
+    │       ├── MessageList
+    │       └── MessageInspector
+    │           ├── EmailRenderer
+    │           ├── AttachmentList
+    │           └── SourceViewer
+    ├── MonitorView
+    │   └── ListControls
+    ├── ArchivedView
+    ├── StatusMessage
+    └── Confirmation boundary
+```
+
+`App` owns authentication, active-view navigation, the saved-mailbox catalog, selected mailboxes, loaded message summaries, selected message identity, and URL restoration. Each list owns its search, read filter, sort, and filter-panel state. `MessageInspector` owns only the selected message response, attachments, source, loading state, and visible errors. Derived counts, sorted and filtered lists, accessible summaries, active-control indicators, and disabled states are calculated during rendering rather than copied into state.
+
+| State category | Values |
+| -------------- | ------ |
+| Server state | Session, active and archived mailbox catalogs, message summaries, selected parsed message, attachments, monitor summaries |
+| URL state | Selected mailbox and selected message identifier in the `mailbox` and `message` query parameters |
+| User-input state | Credentials, active view, selected mailboxes, search text, read filter, sort, open tools, source visibility |
+| Derived render values | Visible and ordered messages, counts, labels, empty explanations, selected styling, enabled actions |
+
+Inbucket's `seen` value remains part of fetched message and monitor data. It is updated in React only after the upstream-backed read request succeeds. There is no second unread collection or client-side read database.
+
+### Behavior contract
+
+- Access starts by checking the private session. The visible outcomes are signed out, authenticating, authenticated, expired session, and temporarily unavailable. Login clears the password, disables duplicate submission while pending, reports incorrect credentials separately, and restores focus after an access-state change. Sign out clears mailbox and message selection and removes their query parameters.
+- Navigation uses ordinary buttons with `aria-current`, not partial tab semantics. Mailboxes, Monitor, and Archived retain their user controls while hidden. Monitor polling runs only while its authenticated view is visible.
+- Add and open loads any trimmed mailbox name and restores matching archived metadata through the mailbox endpoint. Saved mailboxes support individual selection, Select all, Clear, Archive selected, and confirmed permanent deletion. Successful items leave a partial-failure selection while failed items remain available for retry. Monitor arrivals can add catalog metadata but never restore an archived mailbox.
+- Selected mailboxes load together. Each successful response contributes its mailbox identity, failed responses produce a visible partial result, and default ordering is deterministic. Search covers subject, sender, recipient, mailbox, and displayed date. Read and unread filters are mutually exclusive. Sorting supports newest, oldest, largest, and smallest, keeps stable ties, and puts unknown values after known values.
+- Opening a message shows loading, not-found, upstream-error, and parsed-message states. Subject, From, To, Date, sanitized HTML or plaintext, attachments, source, and deletion remain visible user behaviors. Read styling changes only after the read response succeeds. Changing selection prevents stale message, attachment, source, or renderer results from replacing the current message.
+- HTML mail is sanitized and rendered through an authenticated isolated iframe. Sender layout styles, safe external links, CID raster images, safe data images, plaintext linkification, remote-image consent, script blocking, form blocking, no-referrer behavior, and parent isolation remain required. Attachments use authenticated download-only endpoints.
+- Monitor has loading, empty, populated, refreshed, unauthorized, and upstream-error outcomes. Its search, read filters, sorting, and mailbox-message navigation use current upstream `seen` data. Archived has dedicated loading, empty, populated, partial-count, catalog-error, restore-pending, and restore-error outcomes. Restore is non-destructive, while mailbox purge remains a separate confirmed action.
+- Add-mailbox, mailbox-management, and filter controls close on outside interaction. Escape closes them and restores focus to the invoking control. The application preserves the skip link, headings, labels, live status regions, visible focus, destructive confirmation, and desktop, tablet, and mobile layouts.
+
+### Frontend API contract
+
+Every request uses `credentials: include`, a relative same-origin path, and the Rails encrypted HttpOnly session cookie. JSON requests use `Content-Type: application/json`. Private API responses use `Cache-Control: private, no-store` and `Pragma: no-cache`.
+
+| Operation | Request | Success | Visible failure contract |
+| --------- | ------- | ------- | ------------------------ |
+| Restore session | `GET /v1/session` | `200` session JSON | `401` signed out, other status unavailable |
+| Sign in | `POST /v1/session` with username and password JSON | `200` session JSON | `401` incorrect credentials, other status unavailable |
+| Sign out | `DELETE /v1/session` | `204` | `401` treated as signed out, other status retryable |
+| Active mailbox catalog | `GET /v1/inbucket/mailboxes` | `200` string array | `401` expired, other status catalog error |
+| Archived catalog | `GET /v1/inbucket/mailboxes?archived=true` | `200` name and nullable message-count array | `401` expired, other status archived error |
+| Load or open mailbox | `GET /v1/inbucket/mailbox?name=...` | `200` message-summary array | `401` expired, `404` not found, `502` upstream unavailable, other status retryable |
+| Archive or restore mailbox | `PATCH /v1/inbucket/mailbox/archive?name=...` with optional `archived=false` | `204` | `401` expired, `404` missing metadata, other status retryable |
+| Purge mailbox | `DELETE /v1/inbucket/mailbox?name=...` | `204` | `401` expired, `404` missing, `502` upstream unavailable, partial outcomes retained |
+| Monitor summaries | `GET /v1/inbucket/monitor/messages` | `200` array capped by Rails at 200 | `401` expired, `502` upstream unavailable, other status retryable |
+| Parsed message | `GET /v1/inbucket/mailboxes/:name/messages/:id` | `200` parsed-message JSON | `401` expired, `404` not found, `502` upstream unavailable |
+| Mark read | `PATCH /v1/inbucket/mailboxes/:name/messages/:id/read` | `204` | Any failure leaves the message visibly unread |
+| Message source | `GET /v1/inbucket/mailboxes/:name/messages/:id/source` | `200` plain text | `401` expired, `404` not found, `502` upstream unavailable |
+| Attachment catalog | `GET /v1/inbucket/mailboxes/:name/messages/:id/attachments` | `200` attachment array | `401` expired, `404` missing, `422` invalid message source, `502` upstream unavailable |
+| Attachment download | `GET /v1/inbucket/mailboxes/:name/messages/:id/attachments/:index` | Download response with `Content-Disposition: attachment` | `401` expired, `404` missing |
+| Email frame | `GET /v1/email-frame` with optional `remote_images=true` | `200` isolated HTML shell | `401` expired |
+| Delete message | `DELETE /v1/inbucket/message?name=...&id=...` | `204` | `401` expired, `404` missing, `502` upstream unavailable |
+
+Rails normalizes parameter errors to `422` JSON, missing records to `404` JSON, and upstream transport or invalid-response failures to `502` JSON. Bulk mailbox actions are independent requests, so the frontend reports completed and failed item totals without turning a partial outcome into full success.
+
+### Delivery and security contract
+
+`frontend/index.html` is the authored shell. Vite clears `public/`, creates `public/index.html`, and emits content-fingerprinted JavaScript, CSS, images, and split chunks under `public/assets`. The Docker Node stage builds those files once, and the final Ruby image copies only `/build/public` into `/app/public`. Puma and Rails static middleware serve `/`, generated assets, `/up`, and `/v1/*` from one origin. StartOS exports that Puma origin as the HTTPS Web Client Interface at `/`.
+
+The shell links a root-scoped web app manifest and dedicated PNG icons from `frontend/public`. The manifest launches the HTTPS Web Client Interface in standalone display mode, while the Apple touch icon and compatibility metadata provide the same branded Home Screen behavior on iPhone and iPad. The installed app uses the same HttpOnly cookie session and same-origin network APIs. It has no service worker or offline message cache, so Inbucket must remain reachable.
+
+Rails sends `Cache-Control: no-cache` for `/`, `/index.html`, `/manifest.webmanifest`, and the stable Home Screen icon paths, so they revalidate after a package upgrade. Files under `/assets/` receive `Cache-Control: public, max-age=31536000, immutable` because Vite gives every production asset a content fingerprint. Private `/v1/*` responses use `private, no-store`.
+
+The document CSP remains `default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; form-action 'self'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'`. Application scripts and styles are external same-origin assets. The email frame has its own response CSP with `default-src 'none'`, no scripts, objects, frames, forms, or base URI, inline sender styles allowed only inside the isolated frame, and remote image origins allowed only after explicit consent. It also sends `Referrer-Policy: no-referrer` and `X-Content-Type-Options: nosniff`.
+
+The Makefile treats the Dockerfile, lockfiles, Gemfiles, Vite configuration, Rails source, database files, support library, and complete `frontend/` tree as client build inputs. A change to any of them invalidates the architecture-specific `.s9pk` target even when `start-cli s9pk list-ingredients` does not enumerate the full Docker context. Release candidates still use `make clean x86` and `make clean arm` so validation never depends on a cached client image or stale `public/` output.
+
+### Local development
+
+Install locked dependencies, start a real PostgreSQL test or development database, and run the checks from the repository root:
+
+```sh
+npm ci
+npm run check
+npm test
+bundle exec rspec
+```
+
+For browser development, run Rails as the same-origin API and static server in one terminal and Vite's production build watcher in another:
+
+```sh
+bundle exec rails server -p 3000
+npm run build:frontend:watch
+```
+
+The watcher writes fresh fingerprinted output into `public/`, which Rails serves with the same origin, session cookie, Origin validation, email-frame endpoint, downloads, and CSP used by production. There is no Vite development-server proxy. A normal production build is `npm run build:frontend`; `npm run check` runs both StartOS and frontend TypeScript configurations.
+
+### React 19.2 feature decisions
+
+- `<Activity>` is deferred. The three views remain mounted to preserve their user controls, use the native `hidden` attribute for inactive output, and explicitly start and stop Monitor effects from active-view state.
+- `useEffectEvent` is deferred. Polling, request, renderer, and listener lifecycles have small explicit dependency sets and abort or clean up directly.
+- React Compiler is deferred. The client has no measured rendering bottleneck that justifies adding its build integration after parity validation.
+- The client does not use speculative `memo`, `useMemo`, or `useCallback`. Callback identity is stabilized only where an Effect lifecycle requires it.
+
+### Framework-neutral acceptance scenarios
+
+1. Restore a valid session or show the correct signed-out, expired, or unavailable state. Sign in and sign out through visible results with disabled pending controls.
+2. Select one or several saved mailboxes and see one deterministic combined list. Add and open an archived name, archive selected names, confirm a purge, and retain failed names after partial results.
+3. Search every documented field, switch mutually exclusive read filters, apply every sort, preserve stable ties, place unknown values last, and show the matching empty explanation.
+4. Open a message, mark it read only after success, keep it unread after failure, view source, list and download attachments, delete with confirmation, and prevent stale responses after rapid message switching.
+5. Render sanitized HTML, plaintext, CID and safe data images, safe external links, blocked unsafe content, and remote images only after consent inside the isolated frame.
+6. Load and refresh Monitor only while visible, preserve its controls across refreshes, and open an arrival in its mailbox. Show Archived loading, empty, partial-count, catalog-error, restore-success, and restore-error results.
+7. Complete the representative workflows with keyboard access, focus return, labels, headings, live announcements, and desktop, tablet, and mobile layouts.
 
 ## Volume and Data Layout
 
@@ -54,7 +181,7 @@ Two volumes: received mail on one, the client's own state on the other.
 
 | Volume            | Mount point                | Contents                                                             |
 | ----------------- | -------------------------- | -------------------------------------------------------------------- |
-| `main`            | `/config`, `/storage`      | Upstream's config directory and the message store                    |
+| `main`            | `/config`, `/storage`      | Upstream's config, messages, indexes, and shared `seen` state        |
 | `main`            | not mounted                | `store.json`, at the volume root                                     |
 | `client-postgres` | `/var/lib/postgresql/data` | The client's users, sessions, mailbox catalog, and monitor summaries |
 
@@ -68,7 +195,7 @@ One model, holding StartOS-side state. Upstream Inbucket has no configuration fi
 | ------------ | ----------------- | ----------------------------------------- | --------------- |
 | `store.json` | `main:store.json` | At install, and by **Set Admin Password** | By both actions |
 
-It carries two unrelated things. The first is the settings the user chose — accepted domain, retention period, per-mailbox message cap — which are read at start and turned into `INBUCKET_*` variables. Changing any of them requires a restart to take effect, and the service reads them fresh each time, so an edit made here always wins.
+It carries two unrelated things. The first is the settings the user chose: accepted domain, retention period, and per-mailbox message cap. These are read at start and turned into `INBUCKET_*` variables. Changing any of them requires a restart to take effect, and the service reads them fresh each time, so an edit made here always wins.
 
 The second is the client's own secrets: its PostgreSQL password and Rails signing key, seeded once at install and never regenerated — a restore keeps the ones that came with the backup, which is what lets the restored database still be read. The client's password sits alongside them but is minted only by **Set Admin Password**; init never generates one.
 
@@ -105,12 +232,12 @@ Two actions, both user-facing.
 
 ### Configure Inbucket
 
-- **When to run it** — first at install, prompted by the task; afterwards to change the accepted domain or the storage limits.
+- **When to run it:** First at install, prompted by the task; afterwards to change the accepted domain or storage limits.
 - **What the domain is** — a literal match against the recipient address, nothing more. It is never resolved, and the package never verifies ownership, so a reserved name like `mailbox.test` is a perfectly valid answer for someone only feeding Inbucket from their own applications. A domain the user owns is needed only to receive mail from the internet, which additionally needs the port-25 forward under [Limitations](#limitations-and-differences).
-- **What it changes** — the domain, retention period, and per-mailbox cap in `store.json`. The form is pre-filled with what is already saved.
+- **What it changes:** The domain, retention period, and per-mailbox cap in `store.json`. The form is pre-filled with what is already saved.
 - **Cost** — instant to save. The new values reach Inbucket on its next start.
 - **Repeat safety** — idempotent.
-- **What happens next** — restart to apply. Changing the domain does not rename existing mailboxes, and mail for the old domain stops being accepted. Lowering retention or the message cap deletes stored messages that no longer fit.
+- **What happens next:** Restart to apply. Changing the domain does not rename existing mailboxes, and mail for the old domain stops being accepted. Lowering retention or the message cap deletes stored messages that no longer fit.
 - **Outputs** — none.
 
 ### Set Admin Password
@@ -155,7 +282,7 @@ The strategy is mixed. `main` — every received message and upstream's config �
 
 Nothing is deliberately excluded. A restored instance needs nothing re-entered: the domain and storage settings come back in `store.json`, the client's account and saved mailbox catalog come back in the dump, and the credentials that worked before the backup still work.
 
-The monitor's summaries of past deliveries are in the dump too, but they are only a convenience view — the messages themselves are on `main` and are what actually matters.
+The monitor's summaries of past deliveries are in the database dump. Message headers, including Inbucket's shared `seen` state, are stored with the messages on `main`, so backup and restore preserve the same read indicator across the Rails client and other interfaces using the upstream API.
 
 ## Limitations and Differences
 
@@ -163,7 +290,7 @@ The monitor's summaries of past deliveries are in the dump too, but they are onl
 2. **The SMTP listener has no TLS**, so mail arrives in the clear. It is a receiver for testing and disposable addresses.
 3. **POP3 is bound to loopback and not exported.** Upstream serves it; here it is unreachable.
 4. **Only one domain is accepted at a time.** Upstream can accept several; the package's action takes one.
-5. **The client renders HTML mail only after sanitizing it**, with a strict same-origin content policy. Remote images do not load, `cid:` images are proxied through an authenticated endpoint and only common raster formats are returned, and attachments download rather than display — PDF and SVG included.
+5. **The client renders HTML mail only after sanitizing it** inside an isolated frame. Sender CSS and complex table layouts are preserved. Remote images are blocked by default and load only after explicit approval. `cid:` images are proxied through an authenticated endpoint, only common raster formats are returned, and attachments download instead of displaying inline, including PDF and SVG files. Its desktop workspace gives the message list and selected message independent scrolling, client-side search, read and unread filtering, date and size sorting of loaded mailbox and monitor metadata, unread indicators backed by Inbucket's shared `seen` state, and mailbox creation and management from the compact toolbar.
 6. **Reaching Inbucket from the internet needs an external port 25 forward.** StartOS publishes the SMTP interface on 2500 and cannot map 25 for you.
 
 ## Quick Reference for AI Consumers
