@@ -15,6 +15,8 @@ interface ListControlsProps {
   searchLabel: string
   searchPlaceholder: string
   triggerLabel: string
+  showTagFilter?: boolean
+  showDateFilter?: boolean
   onSearchChange: (value: string) => void
   onReadFilterChange: (value: ReadFilter) => void
   onMailboxChange: (value: string) => void
@@ -67,6 +69,8 @@ export const ListControls = ({
   searchLabel,
   searchPlaceholder,
   triggerLabel,
+  showTagFilter = true,
+  showDateFilter = true,
   onSearchChange,
   onReadFilterChange,
   onMailboxChange,
@@ -134,6 +138,20 @@ export const ListControls = ({
           </svg>
         </button>
         <div id={panelId} className="list-filter-popover" hidden={!open}>
+          <div className="list-filter-popover-heading">
+            <strong>Filter and sort</strong>
+            <button
+              className="list-filter-close"
+              type="button"
+              aria-label="Close filters"
+              title="Close filters"
+              onClick={closeAndFocus}
+            >
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
           <fieldset className="list-filter-section">
             <legend>Filter</legend>
             <label className="list-filter-option">
@@ -191,7 +209,7 @@ export const ListControls = ({
               </fieldset>
             </>
           ) : null}
-          {tags.length ? (
+          {showTagFilter && tags.length ? (
             <>
               <div className="list-filter-divider" />
               <fieldset className="list-filter-section">
@@ -213,42 +231,46 @@ export const ListControls = ({
               </fieldset>
             </>
           ) : null}
-          <div className="list-filter-divider" />
-          <fieldset className="list-filter-section">
-            <legend>Date</legend>
-            <div className="list-filter-dates">
-              <label>
-                <span>From</span>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  max={dateTo || undefined}
-                  onChange={(event) =>
-                    onDateFromChange(event.currentTarget.value)
-                  }
-                />
-              </label>
-              <label>
-                <span>To</span>
-                <input
-                  type="date"
-                  value={dateTo}
-                  min={dateFrom || undefined}
-                  onChange={(event) =>
-                    onDateToChange(event.currentTarget.value)
-                  }
-                />
-              </label>
-            </div>
-            <button
-              className="list-filter-clear"
-              type="button"
-              disabled={!dateFrom && !dateTo}
-              onClick={onDateRangeClear}
-            >
-              Clear dates
-            </button>
-          </fieldset>
+          {showDateFilter ? (
+            <>
+              <div className="list-filter-divider" />
+              <fieldset className="list-filter-section">
+                <legend>Date</legend>
+                <div className="list-filter-dates">
+                  <label>
+                    <span>From</span>
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      max={dateTo || undefined}
+                      onChange={(event) =>
+                        onDateFromChange(event.currentTarget.value)
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      min={dateFrom || undefined}
+                      onChange={(event) =>
+                        onDateToChange(event.currentTarget.value)
+                      }
+                    />
+                  </label>
+                </div>
+                <button
+                  className="list-filter-clear"
+                  type="button"
+                  disabled={!dateFrom && !dateTo}
+                  onClick={onDateRangeClear}
+                >
+                  Clear dates
+                </button>
+              </fieldset>
+            </>
+          ) : null}
           <div className="list-filter-divider" />
           <fieldset className="list-filter-section">
             <legend>Sort by</legend>

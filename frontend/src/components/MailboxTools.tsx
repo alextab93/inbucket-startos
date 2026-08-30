@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
-type ToolName = 'add' | 'manage'
+const CloseIcon = () => (
+  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+)
 
 interface MailboxToolsProps {
   mailboxes: string[]
@@ -11,7 +15,6 @@ interface MailboxToolsProps {
   onSelectionChange: (mailboxes: string[]) => void
   onLiveAllMailboxesChange: (enabled: boolean) => void
   onArchive: () => void
-  onDelete: () => void
 }
 
 export const MailboxTools = ({
@@ -23,29 +26,27 @@ export const MailboxTools = ({
   onSelectionChange,
   onLiveAllMailboxesChange,
   onArchive,
-  onDelete,
 }: MailboxToolsProps) => {
-  const [openTool, setOpenTool] = useState<ToolName | null>(null)
+  const [manageOpen, setManageOpen] = useState(false)
   const [mailboxName, setMailboxName] = useState('')
-  const addRef = useRef<HTMLDetailsElement>(null)
   const manageRef = useRef<HTMLDetailsElement>(null)
+  const hasMailboxes = mailboxes.length > 0
+  const hasSelection = selectedMailboxes.length > 0
+  const allSelected =
+    hasMailboxes &&
+    mailboxes.every((mailbox) => selectedMailboxes.includes(mailbox))
 
   useEffect(() => {
-    if (!openTool) return
+    if (!manageOpen) return
     const closeOutside = (event: PointerEvent) => {
       const target = event.target as Node
-      if (
-        addRef.current?.contains(target) ||
-        manageRef.current?.contains(target)
-      )
-        return
-      setOpenTool(null)
+      if (manageRef.current?.contains(target)) return
+      setManageOpen(false)
     }
     const closeWithEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      const details = openTool === 'add' ? addRef.current : manageRef.current
-      setOpenTool(null)
-      details?.querySelector('summary')?.focus()
+      setManageOpen(false)
+      manageRef.current?.querySelector('summary')?.focus()
     }
     document.addEventListener('pointerdown', closeOutside)
     document.addEventListener('keydown', closeWithEscape)
@@ -53,16 +54,21 @@ export const MailboxTools = ({
       document.removeEventListener('pointerdown', closeOutside)
       document.removeEventListener('keydown', closeWithEscape)
     }
-  }, [openTool])
+  }, [manageOpen])
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const mailbox = mailboxName.trim()
     if (!mailbox) return
     setMailboxName('')
-    setOpenTool(null)
+    setManageOpen(false)
     await onAdd(mailbox)
-    addRef.current?.querySelector('summary')?.focus()
+    manageRef.current?.querySelector('summary')?.focus()
+  }
+
+  const closeTool = () => {
+    setManageOpen(false)
+    manageRef.current?.querySelector('summary')?.focus()
   }
 
   const toggleMailbox = (mailbox: string, selected: boolean) => {
@@ -86,116 +92,110 @@ export const MailboxTools = ({
         <span>Live all active mailboxes</span>
       </label>
       <details
-        ref={addRef}
-        className="mailbox-tool mailbox-add-tool"
-        open={openTool === 'add'}
-        onToggle={(event) =>
-          setOpenTool(
-            event.currentTarget.open
-              ? 'add'
-              : (current) => (current === 'add' ? null : current),
-          )
-        }
-      >
-        <summary>Add mailbox</summary>
-        <form className="mailbox-form" onSubmit={submit}>
-          <label htmlFor="mailbox-name">Mailbox name</label>
-          <div>
-            <input
-              id="mailbox-name"
-              name="mailbox"
-              autoComplete="off"
-              required
-              value={mailboxName}
-              onChange={(event) => setMailboxName(event.currentTarget.value)}
-            />
-            <button className="button button-primary" type="submit">
-              Add and open
-            </button>
-          </div>
-        </form>
-      </details>
-      <details
         ref={manageRef}
         className="mailbox-tool mailbox-manage-tool"
-        open={openTool === 'manage'}
-        onToggle={(event) =>
-          setOpenTool(
-            event.currentTarget.open
-              ? 'manage'
-              : (current) => (current === 'manage' ? null : current),
-          )
-        }
+        open={manageOpen}
+        onToggle={(event) => setManageOpen(event.currentTarget.open)}
       >
         <summary aria-label="Manage saved mailboxes">Mailboxes</summary>
-        <section
-          className="mailbox-selector"
-          aria-labelledby="saved-mailboxes-title"
-        >
-          <div className="mailbox-selector-heading">
-            <h2 id="saved-mailboxes-title">Saved mailboxes</h2>
-            <div className="mailbox-selector-actions">
-              <button
-                className="button button-secondary"
-                type="button"
-                disabled={actionPending}
-                onClick={() => onSelectionChange(mailboxes)}
-              >
-                Select all
-              </button>
-              <button
-                className="button button-secondary"
-                type="button"
-                disabled={actionPending}
-                onClick={() => onSelectionChange([])}
-              >
-                Clear
-              </button>
-              <button
-                className="button button-secondary"
-                type="button"
-                disabled={actionPending}
-                onClick={onArchive}
-              >
-                Archive selected
-              </button>
-              <button
-                className="button button-danger"
-                type="button"
-                disabled={actionPending}
-                onClick={onDelete}
-              >
-                Delete selected
-              </button>
-            </div>
-          </div>
-          <div
-            className="mailbox-options"
-            role="group"
+        {manageOpen ? (
+          <section
+            className="mailbox-selector"
             aria-labelledby="saved-mailboxes-title"
           >
-            {mailboxes.length ? (
-              mailboxes.map((mailbox) => (
-                <label className="mailbox-option" key={mailbox}>
-                  <input
-                    type="checkbox"
-                    value={mailbox}
-                    checked={selectedMailboxes.includes(mailbox)}
-                    disabled={actionPending}
-                    onChange={(event) =>
-                      toggleMailbox(mailbox, event.currentTarget.checked)
-                    }
-                  />
-                  <span title={mailbox}>{mailbox}</span>
-                </label>
-              ))
-            ) : (
-              <p className="mailbox-options-empty">
-                No saved mailboxes yet. Add a mailbox to open it.
-              </p>
-            )}
-          </div>
-        </section>
+            <div className="mailbox-tool-dialog-heading">
+              <h2 id="saved-mailboxes-title">Saved mailboxes</h2>
+              <button
+                className="list-filter-close mailbox-tool-close"
+                type="button"
+                aria-label="Close saved mailboxes"
+                title="Close saved mailboxes"
+                onClick={closeTool}
+              >
+                <CloseIcon />
+              </button>
+            </div>
+            <div className="mailbox-selector-controls">
+              <div className="mailbox-selector-actions">
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  disabled={actionPending || !hasMailboxes || allSelected}
+                  onClick={() => onSelectionChange(mailboxes)}
+                >
+                  Select all
+                </button>
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  disabled={actionPending || !hasSelection}
+                  onClick={() => onSelectionChange([])}
+                >
+                  Clear
+                </button>
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  disabled={actionPending || !hasSelection}
+                  onClick={onArchive}
+                >
+                  Archive selected
+                </button>
+              </div>
+              <form
+                className="mailbox-selector-add"
+                aria-label="Add mailbox"
+                onSubmit={submit}
+              >
+                <input
+                  id="mailbox-name"
+                  name="mailbox"
+                  aria-label="Mailbox name"
+                  placeholder="Mailbox name"
+                  autoComplete="off"
+                  required
+                  value={mailboxName}
+                  onChange={(event) =>
+                    setMailboxName(event.currentTarget.value)
+                  }
+                />
+                <button
+                  className="button button-primary"
+                  type="submit"
+                  aria-label="Add and open mailbox"
+                >
+                  Add
+                </button>
+              </form>
+            </div>
+            <div
+              className="mailbox-options"
+              role="group"
+              aria-labelledby="saved-mailboxes-title"
+            >
+              {mailboxes.length ? (
+                mailboxes.map((mailbox) => (
+                  <label className="mailbox-option" key={mailbox}>
+                    <input
+                      type="checkbox"
+                      value={mailbox}
+                      checked={selectedMailboxes.includes(mailbox)}
+                      disabled={actionPending}
+                      onChange={(event) =>
+                        toggleMailbox(mailbox, event.currentTarget.checked)
+                      }
+                    />
+                    <span title={mailbox}>{mailbox}</span>
+                  </label>
+                ))
+              ) : (
+                <p className="mailbox-options-empty">
+                  No saved mailboxes yet. Enter a mailbox name above to open it.
+                </p>
+              )}
+            </div>
+          </section>
+        ) : null}
       </details>
     </>
   )

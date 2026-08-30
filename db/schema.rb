@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_08_29_050000) do
+ActiveRecord::Schema[8.0].define(version: 2026_08_30_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -81,6 +81,18 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_29_050000) do
     t.index ["user_id"], name: "index_tags_on_user_id"
   end
 
+  create_table "trashed_messages", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.bigint "inbucket_message_id", null: false
+    t.datetime "trashed_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["inbucket_message_id"], name: "index_trashed_messages_on_inbucket_message_id"
+    t.index ["user_id", "inbucket_message_id"], name: "index_trashed_messages_on_user_id_and_inbucket_message_id", unique: true
+    t.index ["user_id", "trashed_at", "id"], name: "index_trashed_messages_on_user_id_and_trashed_at_and_id"
+    t.index ["user_id"], name: "index_trashed_messages_on_user_id"
+  end
+
   create_table "user_sessions", force: :cascade do |t|
     t.bigint "user_id", null: false
     t.string "token_digest", null: false
@@ -107,5 +119,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_29_050000) do
   add_foreign_key "starred_messages", "inbucket_messages", on_delete: :cascade
   add_foreign_key "starred_messages", "users"
   add_foreign_key "tags", "users"
+  add_foreign_key "trashed_messages", "inbucket_messages", on_delete: :cascade
+  add_foreign_key "trashed_messages", "users"
   add_foreign_key "user_sessions", "users"
 end

@@ -7,8 +7,9 @@ import { MailboxTools } from './components/MailboxTools'
 import { MessageWorkspace } from './components/MessageWorkspace'
 import { StatusMessage } from './components/StatusMessage'
 import { StarredView } from './components/StarredView'
+import { TrashView } from './components/TrashView'
 import { filterMessages, sortMessages } from './formatting'
-import { readLocation, writeLocation } from './location'
+import { readLocation, writeLocation, type AppLocation } from './location'
 import type {
   ArchivedMailbox,
   AuthenticationState,
@@ -41,6 +42,32 @@ const defaultMessageQuery: MessageListQuery = {
 const normalizeMailboxNames = (mailboxes: string[]): string[] => [
   ...new Set(mailboxes.map((mailbox) => mailbox.trim()).filter(Boolean)),
 ]
+
+const restoreAvailableMailboxes = (
+  location: AppLocation,
+  availableMailboxes: string[] | null,
+): AppLocation => {
+  if (location.view !== 'mailboxes' || availableMailboxes === null) {
+    return location
+  }
+
+  const available = new Set(availableMailboxes)
+  const selectedMailboxes = normalizeMailboxNames(
+    location.selectedMailboxes || [],
+  ).filter((mailbox) => available.has(mailbox))
+  const selectedMessageMailbox = selectedMailboxes.includes(location.mailbox)
+    ? location.mailbox
+    : ''
+
+  return {
+    ...location,
+    selectedMailboxes,
+    mailbox:
+      selectedMessageMailbox ||
+      (selectedMailboxes.length === 1 ? selectedMailboxes[0] : ''),
+    message: selectedMessageMailbox ? location.message : '',
+  }
+}
 
 const messageKey = (mailbox: string, id: string): string =>
   `${mailbox}\u0000${id}`
@@ -116,6 +143,7 @@ export const App = () => {
   const [archivedCatalogError, setArchivedCatalogError] = useState('')
   const [selectedMailboxes, setSelectedMailboxes] = useState<string[]>([])
   const [liveAllMailboxes, setLiveAllMailboxes] = useState(true)
+  const [mobileToolbarExpanded, setMobileToolbarExpanded] = useState(false)
   const [messages, setMessages] = useState<MessageSummary[]>([])
   const [mailboxLoading, setMailboxLoading] = useState(false)
   const [mailboxLoadingMore, setMailboxLoadingMore] = useState(false)
@@ -125,6 +153,7 @@ export const App = () => {
     null,
   )
   const [messageTotalCount, setMessageTotalCount] = useState(0)
+  const [messageListResetKey, setMessageListResetKey] = useState(0)
   const [mailboxStatus, setMailboxStatus] =
     useState<StatusValue>(defaultMailboxStatus)
   const [selectedMessage, setSelectedMessage] =
@@ -252,6 +281,7 @@ export const App = () => {
   const refreshCatalogs = useCallback(
     async (signal?: AbortSignal, showLoading = false) => {
       if (showLoading) setCatalogLoading(true)
+      let activeMailboxes: string[] | null = null
       const [activeResult, archivedResult] = await Promise.allSettled([
         api.activeMailboxes(signal),
         api.archivedMailboxes(signal),
@@ -269,7 +299,9 @@ export const App = () => {
         activeResult.status === 'fulfilled' &&
         validActiveMailboxes(activeResult.value)
       ) {
+        activeMailboxes = activeResult.value
         setMailboxes(activeResult.value)
+        mailboxesRef.current = activeResult.value
         activeResult.value.forEach((mailbox) =>
           knownMailboxesRef.current.add(mailbox),
         )
@@ -305,6 +337,7 @@ export const App = () => {
       }
 
       if (showLoading) setCatalogLoading(false)
+      return activeMailboxes
     },
     [expireSession],
   )
@@ -418,6 +451,7 @@ export const App = () => {
         messageQueryTimer.current = null
       }
       mailboxLoadController.current?.abort()
+      setMessageListResetKey((current) => current + 1)
       setSelectedMailboxes(names)
       selectedMailboxesRef.current = names
       setSelectedMessage(null)
@@ -426,6 +460,7 @@ export const App = () => {
         writeLocation(
           {
             view: 'mailboxes',
+            selectedMailboxes: names,
             mailbox:
               requestedMessageId && names.length
                 ? requestedMessageMailbox || names[0]
@@ -477,6 +512,7 @@ export const App = () => {
   const changeMessageQuery = useCallback(
     (query: MessageListQuery) => {
       const searchChanged = query.search !== messageQueryRef.current.search
+      setMessageListResetKey((current) => current + 1)
       setMessageQuery(query)
       messageQueryRef.current = query
       if (messageQueryTimer.current !== null) {
@@ -576,12 +612,15 @@ export const App = () => {
         setSession(restoredSession)
         setAuthentication('authenticated')
         setAccessStatus({ message: '' })
-        await Promise.all([
+        const [availableMailboxes] = await Promise.all([
           refreshCatalogs(controller.signal, true),
           loadTags(controller.signal),
         ])
         if (controller.signal.aborted) return
-        const location = readLocation()
+        const location = restoreAvailableMailboxes(
+          readLocation(),
+          availableMailboxes || null,
+        )
         setView(location.view)
         setStarredSelectedMessage(
           location.view === 'starred' && location.mailbox && location.message
@@ -589,8 +628,14 @@ export const App = () => {
             : null,
         )
         writeLocation(location)
-        if (location.view === 'mailboxes' && location.mailbox) {
-          await loadMailboxes([location.mailbox], location.message, 'replace')
+        const restoredMailboxes = location.selectedMailboxes || []
+        if (location.view === 'mailboxes' && restoredMailboxes.length) {
+          await loadMailboxes(
+            restoredMailboxes,
+            location.message,
+            'replace',
+            location.mailbox,
+          )
         }
       } catch (error) {
         if (isAbort(error)) return
@@ -625,14 +670,18 @@ export const App = () => {
     if (authentication !== 'authenticated') return
 
     const restoreHistory = () => {
-      const location = readLocation()
+      const location = restoreAvailableMailboxes(
+        readLocation(),
+        mailboxesRef.current,
+      )
       setView(location.view)
       if (location.view === 'mailboxes') {
         setStarredSelectedMessage(null)
         void loadMailboxes(
-          location.mailbox ? [location.mailbox] : [],
+          location.selectedMailboxes || [],
           location.message,
           null,
+          location.mailbox,
         )
       } else if (location.view === 'starred') {
         setStarredSelectedMessage(
@@ -706,6 +755,10 @@ export const App = () => {
         if (nextSelected !== selectedMailboxesRef.current) {
           selectedMailboxesRef.current = nextSelected
           setSelectedMailboxes(nextSelected)
+          const location = readLocation()
+          if (location.view === 'mailboxes') {
+            writeLocation({ ...location, selectedMailboxes: nextSelected })
+          }
         }
 
         const selectedSet = new Set(
@@ -801,9 +854,11 @@ export const App = () => {
     const targetId =
       view === 'starred'
         ? 'starred-messages-title'
-        : view === 'archive'
-          ? 'archived-mailboxes-title'
-          : 'mailbox-title'
+        : view === 'trash'
+          ? 'trash-messages-title'
+          : view === 'archive'
+            ? 'archived-mailboxes-title'
+            : 'mailbox-title'
     document.getElementById(targetId)?.focus()
   }, [authentication, view])
 
@@ -815,8 +870,14 @@ export const App = () => {
       setSession(authenticatedSession)
       setAuthentication('authenticated')
       setAccessStatus({ message: '' })
-      await Promise.all([refreshCatalogs(undefined, true), loadTags()])
-      const location = readLocation()
+      const [availableMailboxes] = await Promise.all([
+        refreshCatalogs(undefined, true),
+        loadTags(),
+      ])
+      const location = restoreAvailableMailboxes(
+        readLocation(),
+        availableMailboxes || null,
+      )
       setView(location.view)
       setStarredSelectedMessage(
         location.view === 'starred' && location.mailbox && location.message
@@ -824,8 +885,14 @@ export const App = () => {
           : null,
       )
       writeLocation(location)
-      if (location.view === 'mailboxes' && location.mailbox) {
-        await loadMailboxes([location.mailbox], location.message, 'replace')
+      const restoredMailboxes = location.selectedMailboxes || []
+      if (location.view === 'mailboxes' && restoredMailboxes.length) {
+        await loadMailboxes(
+          restoredMailboxes,
+          location.message,
+          'replace',
+          location.mailbox,
+        )
       }
       mainRef.current?.focus()
     } catch (error) {
@@ -901,13 +968,22 @@ export const App = () => {
     const selected = { mailbox, id }
     setSelectedMessage(selected)
     setInspectorEmptyMessage('Select a message to read it.')
-    writeLocation({ view: 'mailboxes', mailbox, message: id }, 'push')
+    writeLocation(
+      {
+        view: 'mailboxes',
+        selectedMailboxes,
+        mailbox,
+        message: id,
+      },
+      'push',
+    )
   }
 
   const closeMessage = () => {
     setSelectedMessage(null)
     writeLocation({
       view: 'mailboxes',
+      selectedMailboxes,
       mailbox: selectedMailboxes.length === 1 ? selectedMailboxes[0] : '',
       message: '',
     })
@@ -1060,6 +1136,7 @@ export const App = () => {
     if (location.view === 'mailboxes') {
       writeLocation({
         view: 'mailboxes',
+        selectedMailboxes,
         mailbox: selectedMailboxes.length === 1 ? selectedMailboxes[0] : '',
         message: '',
       })
@@ -1069,7 +1146,41 @@ export const App = () => {
       '',
       location.view === 'mailboxes' ? 'replace' : null,
     )
-    setMailboxStatus({ message: 'Message deleted.', state: 'authenticated' })
+    setMailboxStatus({
+      message: 'Message deleted permanently.',
+      state: 'authenticated',
+    })
+  }
+
+  const messageTrashed = async () => {
+    if (!selectedMessage) return
+    const trashed = selectedMessage
+    setSelectedMessage(null)
+    setMessages((current) =>
+      current.filter(
+        (message) =>
+          message.mailbox !== trashed.mailbox ||
+          String(message.id) !== trashed.id,
+      ),
+    )
+    setStarredMessages((current) =>
+      current.filter(
+        (message) =>
+          message.mailbox !== trashed.mailbox ||
+          String(message.id) !== trashed.id,
+      ),
+    )
+    setMessageTotalCount((current) => Math.max(0, current - 1))
+    setMailboxStatus({
+      message: 'Message moved to Trash.',
+      state: 'authenticated',
+    })
+    writeLocation({
+      view: 'mailboxes',
+      selectedMailboxes,
+      mailbox: selectedMailboxes.length === 1 ? selectedMailboxes[0] : '',
+      message: '',
+    })
   }
 
   const starredMessageDeleted = async () => {
@@ -1083,32 +1194,55 @@ export const App = () => {
           String(message.id) !== deleted.id,
       ),
     )
-    setStarredStatus({ message: 'Message deleted.', state: 'authenticated' })
+    setStarredStatus({
+      message: 'Message deleted permanently.',
+      state: 'authenticated',
+    })
     if (readLocation().view === 'starred') {
       writeLocation({ view: 'starred', mailbox: '', message: '' })
     }
   }
 
-  const performMailboxAction = async (action: 'archive' | 'delete') => {
-    if (!selectedMailboxes.length) {
-      setMailboxStatus({
-        message: `Select at least one mailbox to ${
-          action === 'delete' ? 'delete' : 'archive'
-        }.`,
-        state: 'error',
-      })
-      return
-    }
+  const starredMessageTrashed = async () => {
+    if (!starredSelectedMessage) return
+    const trashed = starredSelectedMessage
+    setStarredSelectedMessage(null)
+    setStarredMessages((current) =>
+      current.filter(
+        (message) =>
+          message.mailbox !== trashed.mailbox ||
+          String(message.id) !== trashed.id,
+      ),
+    )
+    setMessages((current) =>
+      current.filter(
+        (message) =>
+          message.mailbox !== trashed.mailbox ||
+          String(message.id) !== trashed.id,
+      ),
+    )
     if (
-      action === 'delete' &&
-      !window.confirm(
-        `Permanently delete all messages in ${
-          selectedMailboxes.length === 1
-            ? selectedMailboxes[0]
-            : `${selectedMailboxes.length} selected mailboxes`
-        } and remove them from saved mailboxes?`,
+      messagesRef.current.some(
+        (message) =>
+          message.mailbox === trashed.mailbox &&
+          String(message.id) === trashed.id,
       )
     ) {
+      setMessageTotalCount((current) => Math.max(0, current - 1))
+    }
+    setStarredStatus({
+      message: 'Message moved to Trash.',
+      state: 'authenticated',
+    })
+    writeLocation({ view: 'starred', mailbox: '', message: '' })
+  }
+
+  const archiveSelectedMailboxes = async () => {
+    if (!selectedMailboxes.length) {
+      setMailboxStatus({
+        message: 'Select at least one mailbox to archive.',
+        state: 'error',
+      })
       return
     }
 
@@ -1116,8 +1250,7 @@ export const App = () => {
     const results = await Promise.all(
       selectedMailboxes.map(async (mailbox) => {
         try {
-          if (action === 'delete') await api.purgeMailbox(mailbox)
-          else await api.archiveMailbox(mailbox)
+          await api.archiveMailbox(mailbox)
           return { mailbox, completed: true as const }
         } catch (error) {
           return { mailbox, completed: false as const, error }
@@ -1139,12 +1272,10 @@ export const App = () => {
     setSelectedMailboxes(remaining)
     await refreshCatalogs(undefined, true)
     await loadMailboxes(remaining)
-    const pastTense = action === 'delete' ? 'Deleted' : 'Archived'
-    const failureVerb = action === 'delete' ? 'deleted' : 'archived'
     setMailboxStatus({
       message: failed.length
-        ? `${pastTense} ${completed.length} mailboxes. ${failed.length} mailboxes could not be ${failureVerb}.`
-        : `${pastTense} ${completed.length} mailboxes.`,
+        ? `Archived ${completed.length} mailboxes. ${failed.length} mailboxes could not be archived.`
+        : `Archived ${completed.length} mailboxes.`,
       state: failed.length ? 'error' : 'authenticated',
     })
     setMailboxActionPending(false)
@@ -1172,6 +1303,7 @@ export const App = () => {
       writeLocation(
         {
           view: nextView,
+          selectedMailboxes,
           mailbox:
             selectedMessage?.mailbox ||
             (selectedMailboxes.length === 1 ? selectedMailboxes[0] : ''),
@@ -1247,6 +1379,59 @@ export const App = () => {
               starPending={starPending}
               onStarChange={changeStarred}
               onDeleted={starredMessageDeleted}
+              onTrashed={starredMessageTrashed}
+              tags={tags}
+              tagPending={tagPending}
+              onTagChange={changeTag}
+              onCreateTag={createTag}
+              onUpdateTag={updateTag}
+              onDeleteTag={deleteTag}
+            />
+            <TrashView
+              active={view === 'trash'}
+              onUnauthorized={expireSession}
+              onRead={markRead}
+              onRestoredMessage={(restored) => {
+                const visible =
+                  selectedMailboxesRef.current.includes(restored.mailbox) &&
+                  filterMessages(
+                    [restored],
+                    messageQueryRef.current.search,
+                    messageQueryRef.current.read,
+                    '',
+                    messageQueryRef.current.tag,
+                    messageQueryRef.current.dateFrom,
+                    messageQueryRef.current.dateTo,
+                  ).length === 1
+                if (visible) {
+                  setMessages((current) =>
+                    sortMessages(
+                      [
+                        restored,
+                        ...current.filter(
+                          (message) =>
+                            message.mailbox !== restored.mailbox ||
+                            String(message.id) !== String(restored.id),
+                        ),
+                      ],
+                      messageQueryRef.current.sort,
+                    ),
+                  )
+                  setMessageTotalCount((current) => current + 1)
+                }
+                if (restored.starred === true) {
+                  setStarredMessages((current) => [
+                    restored,
+                    ...current.filter(
+                      (message) =>
+                        message.mailbox !== restored.mailbox ||
+                        String(message.id) !== String(restored.id),
+                    ),
+                  ])
+                }
+              }}
+              starPending={starPending}
+              onStarChange={changeStarred}
               tags={tags}
               tagPending={tagPending}
               onTagChange={changeTag}
@@ -1267,7 +1452,11 @@ export const App = () => {
               onUnauthorized={expireSession}
             />
             <div className="mailbox-view" hidden={view !== 'mailboxes'}>
-              <div className="mailbox-toolbar">
+              <div
+                id="mailbox-controls"
+                className="mailbox-toolbar"
+                data-mobile-collapsed={!mobileToolbarExpanded}
+              >
                 <div className="mailbox-context">
                   <strong>{activeMailboxSummary}</strong>
                   <StatusMessage
@@ -1287,8 +1476,7 @@ export const App = () => {
                   }
                   onSelectionChange={(names) => void loadMailboxes(names)}
                   onLiveAllMailboxesChange={setLiveAllMailboxes}
-                  onArchive={() => void performMailboxAction('archive')}
-                  onDelete={() => void performMailboxAction('delete')}
+                  onArchive={() => void archiveSelectedMailboxes()}
                 />
               </div>
               <MessageWorkspace
@@ -1296,8 +1484,13 @@ export const App = () => {
                 selected={selectedMessage}
                 loading={mailboxLoading}
                 loadingMore={mailboxLoadingMore}
+                paginationResetKey={String(messageListResetKey)}
                 hasMore={Boolean(nextMessageCursor)}
                 totalCount={messageTotalCount}
+                mobileToolbarExpanded={mobileToolbarExpanded}
+                onMobileToolbarToggle={() =>
+                  setMobileToolbarExpanded((expanded) => !expanded)
+                }
                 query={messageQuery}
                 tags={tags}
                 listEmptyMessage={
@@ -1315,6 +1508,7 @@ export const App = () => {
                 starPending={starPending}
                 onStarChange={changeStarred}
                 onDeleted={messageDeleted}
+                onTrashed={messageTrashed}
                 tagPending={tagPending}
                 onTagChange={changeTag}
                 onCreateTag={createTag}

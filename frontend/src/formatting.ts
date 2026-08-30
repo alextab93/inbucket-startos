@@ -30,6 +30,44 @@ export const dateText = (value: HeaderValue): string => {
       }).format(parsed)
 }
 
+export const compactDateText = (
+  value: HeaderValue,
+  now = new Date(),
+): string => {
+  const text = formatValue(value)
+  if (!text) return 'Unknown date'
+  const parsed = new Date(text)
+  if (Number.isNaN(parsed.getTime())) return text
+  const today =
+    parsed.getFullYear() === now.getFullYear() &&
+    parsed.getMonth() === now.getMonth() &&
+    parsed.getDate() === now.getDate()
+  const parts = new Intl.DateTimeFormat(
+    today ? 'en-US' : 'en-GB',
+    today
+      ? { hour: 'numeric', minute: '2-digit', hour12: true }
+      : { day: 'numeric', month: 'short' },
+  ).formatToParts(parsed)
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value || ''
+  return today
+    ? `${part('hour')}:${part('minute')} ${part('dayPeriod')}`
+    : `${part('day')} ${part('month')}`
+}
+
+export const fileSizeText = (value: number): string => {
+  if (!Number.isFinite(value) || value < 0) return ''
+  if (value < 1024) return `${value} B`
+  const units = ['KB', 'MB', 'GB']
+  let size = value / 1024
+  let unit = units[0]
+  for (let index = 1; size >= 1024 && index < units.length; index += 1) {
+    size /= 1024
+    unit = units[index]
+  }
+  return `${new Intl.NumberFormat('en', { maximumFractionDigits: 1 }).format(size)} ${unit}`
+}
+
 const timestamp = (message: MessageSummary): number | null => {
   if (message['posix-millis'] !== undefined) {
     const value = Number(message['posix-millis'])

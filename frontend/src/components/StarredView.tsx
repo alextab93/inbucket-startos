@@ -19,6 +19,7 @@ interface StarredViewProps {
   starPending: (mailbox: string, id: string) => boolean
   onStarChange: (mailbox: string, id: string, starred: boolean) => Promise<void>
   onDeleted: () => Promise<void>
+  onTrashed: () => Promise<void>
   tags: Tag[]
   tagPending: boolean
   onTagChange: (
@@ -45,6 +46,7 @@ export const StarredView = ({
   starPending,
   onStarChange,
   onDeleted,
+  onTrashed,
   tags,
   tagPending,
   onTagChange,
@@ -78,6 +80,7 @@ export const StarredView = ({
         starPending={starPending}
         onStarChange={onStarChange}
         onDeleted={onDeleted}
+        onTrashed={onTrashed}
         tagPending={tagPending}
         onTagChange={onTagChange}
         onCreateTag={onCreateTag}

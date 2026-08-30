@@ -81,14 +81,20 @@ export const ArchivedView = ({
       hidden={!active}
       aria-busy={loading}
     >
-      <h2 id="archived-mailboxes-title" tabIndex={-1}>
-        Archived mailboxes
-      </h2>
-      <p>
-        Archived mailboxes remain in Inbucket but are hidden from the main
-        mailbox selector. Restore is non-destructive. Deleting a mailbox
-        permanently purges its messages and requires confirmation.
-      </p>
+      <header className="archive-view-heading">
+        <div className="archive-view-title">
+          <h2 id="archived-mailboxes-title" tabIndex={-1}>
+            Archived mailboxes
+          </h2>
+          <span className="archive-view-count" aria-live="polite">
+            {`${mailboxes.length} ${mailboxes.length === 1 ? 'archived mailbox' : 'archived mailboxes'}`}
+          </span>
+        </div>
+        <p>
+          Restore a mailbox to return it to the main selector. Permanent
+          deletion removes every message and requires confirmation.
+        </p>
+      </header>
       <StatusMessage
         value={{
           message:
@@ -117,6 +123,7 @@ export const ArchivedView = ({
               <button
                 className="button button-secondary"
                 type="button"
+                aria-label={`Restore ${mailbox.name}`}
                 disabled={actingMailbox === mailbox.name}
                 onClick={() => void restore(mailbox.name)}
               >
@@ -125,6 +132,7 @@ export const ArchivedView = ({
               <button
                 className="button button-danger"
                 type="button"
+                aria-label={`Delete ${mailbox.name} permanently`}
                 disabled={actingMailbox === mailbox.name}
                 onClick={() => void remove(mailbox.name)}
               >

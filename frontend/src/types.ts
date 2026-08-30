@@ -1,4 +1,4 @@
-export type ViewName = 'mailboxes' | 'starred' | 'archive'
+export type ViewName = 'mailboxes' | 'starred' | 'archive' | 'trash'
 
 export type AuthenticationState =
   | 'checking'
@@ -63,6 +63,8 @@ export interface MessageSummary {
   seen?: boolean | unknown
   starred?: boolean | unknown
   tags?: Tag[]
+  available?: boolean
+  trashed_at?: string
   'posix-millis'?: number | string
   header?: Record<string, HeaderValue>
 }
@@ -72,6 +74,15 @@ export interface MessagePage {
   next_cursor: string | null
   partial_mailboxes: string[]
   total_count: number
+  mailboxes?: string[]
+  trash_count?: number
+}
+
+export interface TrashResult {
+  mailbox: string
+  id: string
+  deleted: boolean
+  error: string | null
 }
 
 export interface LiveMessageChange {

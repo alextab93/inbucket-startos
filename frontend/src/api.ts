@@ -8,6 +8,7 @@ import type {
   ParsedMessage,
   Session,
   Tag,
+  TrashResult,
 } from './types'
 import { dateRangeInstants } from './dateRange'
 
@@ -111,6 +112,19 @@ const messagesPath = (
   return `/v1/inbucket/messages?${params.toString()}`
 }
 
+const trashMessagesPath = (
+  query: MessageListQuery,
+  cursor: string | null,
+): string => {
+  const params = new URLSearchParams()
+  if (query.search.trim()) params.set('search', query.search.trim())
+  if (query.read !== 'all') params.set('read', query.read)
+  if (query.mailbox) params.set('mailbox', query.mailbox)
+  if (query.sort !== 'newest') params.set('sort', query.sort)
+  if (cursor) params.set('cursor', cursor)
+  return `/v1/inbucket/trash/messages?${params.toString()}`
+}
+
 export const visibleError = (error: unknown, subject: string): string => {
   if (error instanceof ApiError) {
     if (error.status === 404) return `${subject} was not found.`
@@ -208,6 +222,30 @@ export const api = {
     ),
   starredMessages: (signal?: AbortSignal) =>
     request<MessageSummary[]>('/v1/inbucket/starred/messages', { signal }),
+  trashMessages: (
+    query: MessageListQuery,
+    cursor: string | null,
+    signal?: AbortSignal,
+  ) => request<MessagePage>(trashMessagesPath(query, cursor), { signal }),
+  setTrashed: (
+    mailbox: string,
+    id: string | number,
+    trashed: boolean,
+    signal?: AbortSignal,
+  ) =>
+    request<{
+      trashed: boolean
+      available?: boolean
+      message?: MessageSummary
+    }>(
+      messagePath(mailbox, id, '/trashed'),
+      jsonOptions('PATCH', { trashed }, signal),
+    ),
+  emptyTrash: (signal?: AbortSignal) =>
+    request<{ results: TrashResult[] }>(
+      '/v1/inbucket/trash',
+      jsonOptions('DELETE', undefined, signal),
+    ),
   setStarred: (
     mailbox: string,
     id: string | number,

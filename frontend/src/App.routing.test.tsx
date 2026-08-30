@@ -41,7 +41,7 @@ const routingHandlers = () => [
 ]
 
 describe('URL navigation', () => {
-  it('exposes exactly three views and clears message state between them', async () => {
+  it('exposes exactly four views and clears message state between them', async () => {
     const user = userEvent.setup()
     renderApp(routingHandlers(), '/?mailbox=orders&message=invoice')
 
@@ -50,7 +50,8 @@ describe('URL navigation', () => {
     ).toBeVisible()
     expect(
       screen.getByRole('navigation', { name: 'Mailbox views' }),
-    ).toHaveTextContent('MailboxesStarredArchived')
+    ).toHaveTextContent('MailboxesStarredArchivedTrash')
+    expect(screen.getAllByRole('button', { name: 'Sign out' })).toHaveLength(1)
 
     await user.click(screen.getByRole('button', { name: 'Starred' }))
     expect(
@@ -117,7 +118,9 @@ describe('URL navigation', () => {
       await screen.findByRole('heading', { name: 'Archived mailboxes' }),
     ).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Mailboxes' }))
-    expect(await screen.findByRole('heading', { name: 'Messages' })).toBeVisible()
+    expect(
+      await screen.findByRole('heading', { name: 'Messages' }),
+    ).toBeVisible()
 
     act(() => {
       window.history.replaceState(null, '', '/?mailbox=orders&message=invoice')

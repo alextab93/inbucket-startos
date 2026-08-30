@@ -15,6 +15,7 @@ class InbucketLiveMessagePage
     return bootstrap if params[:cursor].blank?
 
     records = changed_records
+    trashed_ids = user.trashed_messages.where(inbucket_message_id: records.map(&:id)).pluck(:inbucket_message_id).to_set
     page = records.first(limit)
     summaries = page.map(&:rendered_summary)
     starred = StarredMessage.lookup(user:, messages: summaries)
@@ -22,7 +23,8 @@ class InbucketLiveMessagePage
     archived = Mailbox.where(name: page.map(&:mailbox).uniq).pluck(:name, :archived).to_h
 
     {
-      changes: page.map do |record|
+      changes: page.filter_map do |record|
+        next if record.available? && trashed_ids.include?(record.id)
         message = record.rendered_summary(
           starred: starred.key?([record.mailbox, record.message_id]),
           tags: tags.fetch([record.mailbox, record.message_id], [])

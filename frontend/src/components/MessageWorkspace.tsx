@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   accessibleSummary,
+  compactDateText,
   dateText,
   emptyListText,
   filterMessages,
@@ -38,6 +40,10 @@ interface MessageWorkspaceProps {
   hasMore?: boolean
   totalCount?: number
   loadingMore?: boolean
+  paginationResetKey?: string
+  mobileToolbarExpanded?: boolean
+  onMobileToolbarToggle?: () => void
+  toolbarAction?: ReactNode
   onQueryChange?: (query: MessageListQuery) => void
   onLoadMore?: () => void
   onSelectMessage: (mailbox: string, id: string) => void
@@ -47,6 +53,11 @@ interface MessageWorkspaceProps {
   starPending: (mailbox: string, id: string) => boolean
   onStarChange: (mailbox: string, id: string, starred: boolean) => Promise<void>
   onDeleted: () => Promise<void>
+  trashMode?: boolean
+  onTrashed?: () => Promise<void>
+  onRestored?: () => Promise<void>
+  showTagFilter?: boolean
+  showDateFilter?: boolean
   tagPending: boolean
   onTagChange: (
     mailbox: string,
@@ -75,6 +86,10 @@ export const MessageWorkspace = ({
   hasMore = false,
   totalCount,
   loadingMore = false,
+  paginationResetKey = '',
+  mobileToolbarExpanded = false,
+  onMobileToolbarToggle,
+  toolbarAction,
   onQueryChange,
   onLoadMore,
   onSelectMessage,
@@ -84,6 +99,11 @@ export const MessageWorkspace = ({
   starPending,
   onStarChange,
   onDeleted,
+  trashMode = false,
+  onTrashed,
+  onRestored,
+  showTagFilter = true,
+  showDateFilter = true,
   tagPending,
   onTagChange,
   onCreateTag,
@@ -98,7 +118,11 @@ export const MessageWorkspace = ({
   const [dateTo, setDateTo] = useState('')
   const [sort, setSort] = useState<ListSort>('newest')
   const hadSelection = useRef(Boolean(selected))
+  const messageListRef = useRef<HTMLDivElement>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
+  const scrollGeneration = useRef(0)
+  const loadedScrollGeneration = useRef(0)
+  const lastScrollTop = useRef(0)
   const activeQuery = query || {
     search,
     read: readFilter,
@@ -154,19 +178,38 @@ export const MessageWorkspace = ({
     hadSelection.current = Boolean(selected)
   }, [headingId, selected])
 
+  useLayoutEffect(() => {
+    const messageList = messageListRef.current
+    if (messageList) messageList.scrollTop = 0
+    lastScrollTop.current = 0
+    scrollGeneration.current = 0
+    loadedScrollGeneration.current = 0
+  }, [paginationResetKey])
+
   useEffect(() => {
     if (
       !hasMore ||
       loadingMore ||
       !onLoadMore ||
+      !messageListRef.current ||
       !loadMoreRef.current ||
       typeof IntersectionObserver === 'undefined'
     )
       return
 
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) onLoadMore()
-    })
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const isIntersecting = entries.some((entry) => entry.isIntersecting)
+        if (
+          !isIntersecting ||
+          scrollGeneration.current <= loadedScrollGeneration.current
+        )
+          return
+        loadedScrollGeneration.current = scrollGeneration.current
+        onLoadMore()
+      },
+      { root: messageListRef.current },
+    )
     observer.observe(loadMoreRef.current)
     return () => observer.disconnect()
   }, [hasMore, loadingMore, onLoadMore])
@@ -189,10 +232,29 @@ export const MessageWorkspace = ({
         aria-labelledby={headingId}
         hidden={Boolean(selected)}
       >
-        <div className="message-list-heading">
+        <div
+          className={`message-list-heading${onMobileToolbarToggle ? ' has-mailbox-toolbar-trigger' : ''}${toolbarAction ? ' has-toolbar-action' : ''}`}
+        >
           <h2 id={headingId} tabIndex={-1}>
             {heading}
           </h2>
+          {onMobileToolbarToggle ? (
+            <button
+              className="mailbox-toolbar-trigger"
+              type="button"
+              aria-label={`${mobileToolbarExpanded ? 'Hide' : 'Show'} mailbox controls`}
+              title={`${mobileToolbarExpanded ? 'Hide' : 'Show'} mailbox controls`}
+              aria-expanded={mobileToolbarExpanded}
+              aria-controls="mailbox-controls"
+              onClick={onMobileToolbarToggle}
+            >
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                <path
+                  d={mobileToolbarExpanded ? 'M5 15l7-7 7 7' : 'M5 9l7 7 7-7'}
+                />
+              </svg>
+            </button>
+          ) : null}
           <ListControls
             id={controlsId}
             search={activeQuery.search}
@@ -207,6 +269,8 @@ export const MessageWorkspace = ({
             searchLabel="Search messages"
             searchPlaceholder="Search messages"
             triggerLabel="Filter and sort messages"
+            showTagFilter={showTagFilter}
+            showDateFilter={showDateFilter}
             onSearchChange={(value) => {
               setSearch(value)
               updateQuery({ search: value })
@@ -241,9 +305,20 @@ export const MessageWorkspace = ({
               updateQuery({ sort: value })
             }}
           />
+          {toolbarAction}
         </div>
         <StatusMessage value={status} className="message-list-status" />
-        <div className="message-list">
+        <div
+          ref={messageListRef}
+          className="message-list"
+          onScroll={(event) => {
+            const scrollTop = event.currentTarget.scrollTop
+            if (scrollTop > lastScrollTop.current) {
+              scrollGeneration.current += 1
+            }
+            lastScrollTop.current = scrollTop
+          }}
+        >
           {loading ? (
             <p className="message-list-empty">Loading messages.</p>
           ) : null}
@@ -282,6 +357,7 @@ export const MessageWorkspace = ({
                 const current =
                   selected?.mailbox === message.mailbox && selected.id === id
                 const summary = accessibleSummary(message)
+                const fullDate = dateText(message.date)
                 return (
                   <div
                     key={`${message.mailbox}\u0000${id}`}
@@ -306,7 +382,20 @@ export const MessageWorkspace = ({
                       <span className="message-summary-mailbox">
                         {message.mailbox}
                       </span>
-                      <time>{dateText(message.date)}</time>
+                      <time aria-label={fullDate}>
+                        <span
+                          className="message-summary-date-full"
+                          aria-hidden="true"
+                        >
+                          {fullDate}
+                        </span>
+                        <span
+                          className="message-summary-date-compact"
+                          aria-hidden="true"
+                        >
+                          {compactDateText(message.date)}
+                        </span>
+                      </time>
                     </button>
                     <StarButton
                       starred={message.starred === true}
@@ -331,7 +420,10 @@ export const MessageWorkspace = ({
                 <button
                   type="button"
                   disabled={loadingMore}
-                  onClick={onLoadMore}
+                  onClick={() => {
+                    loadedScrollGeneration.current = scrollGeneration.current
+                    onLoadMore?.()
+                  }}
                 >
                   {loadingMore
                     ? 'Loading more messages.'
@@ -353,6 +445,9 @@ export const MessageWorkspace = ({
           onClose={onCloseMessage}
           onStarChange={onStarChange}
           onDeleted={onDeleted}
+          trashMode={trashMode}
+          onTrashed={onTrashed}
+          onRestored={onRestored}
           tags={tags}
           tagPending={tagPending}
           onTagChange={onTagChange}

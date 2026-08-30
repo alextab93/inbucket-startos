@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, isAbort, isUnauthorized, visibleError } from '../api'
-import { dateText, formatValue, headerValue } from '../formatting'
+import { dateText, fileSizeText, formatValue, headerValue } from '../formatting'
 import type {
   Attachment,
   ParsedMessage,
@@ -23,6 +23,9 @@ interface MessageInspectorProps {
   onClose: () => void
   onStarChange: (mailbox: string, id: string, starred: boolean) => Promise<void>
   onDeleted: () => Promise<void>
+  trashMode?: boolean
+  onTrashed?: () => Promise<void>
+  onRestored?: () => Promise<void>
   tags: Tag[]
   tagPending: boolean
   onTagChange: (
@@ -46,6 +49,9 @@ export const MessageInspector = ({
   onClose,
   onStarChange,
   onDeleted,
+  trashMode = false,
+  onTrashed,
+  onRestored,
   tags,
   tagPending,
   onTagChange,
@@ -64,6 +70,7 @@ export const MessageInspector = ({
   const [sourcePending, setSourcePending] = useState(false)
   const [sourceStatus, setSourceStatus] = useState<StatusValue>({ message: '' })
   const [deletePending, setDeletePending] = useState(false)
+  const [trashPending, setTrashPending] = useState(false)
   const backButtonRef = useRef<HTMLButtonElement>(null)
   const sourceController = useRef<AbortController | null>(null)
 
@@ -219,6 +226,36 @@ export const MessageInspector = ({
     }
   }
 
+  const changeTrashed = async (trashed: boolean) => {
+    if (!selected) return
+    setTrashPending(true)
+    setMessageStatus({
+      message: trashed ? 'Moving message to Trash.' : 'Restoring message.',
+      state: 'loading',
+    })
+    try {
+      const result = await api.setTrashed(
+        selected.mailbox,
+        selected.id,
+        trashed,
+      )
+      if (result.trashed !== trashed) throw new Error('invalid_response')
+      setMessageStatus({ message: '' })
+      if (trashed) await onTrashed?.()
+      else await onRestored?.()
+    } catch (error) {
+      if (isUnauthorized(error)) return onUnauthorized()
+      setMessageStatus({
+        message: trashed
+          ? 'The message could not be moved to Trash. Please try again.'
+          : 'The message could not be restored. Please try again.',
+        state: 'error',
+      })
+    } finally {
+      setTrashPending(false)
+    }
+  }
+
   const html = message?.body ? formatValue(message.body.html) : ''
   const text = message?.body ? formatValue(message.body.text) : ''
   const subject = message
@@ -258,57 +295,69 @@ export const MessageInspector = ({
               <path d="m14 6-6 6 6 6M8 12h11" />
             </svg>
           </button>
-          {message ? (
+          {message || trashMode ? (
             <div className="message-action-group">
-              <TagAction
-                tags={tags}
-                assigned={message.tags || []}
-                pending={tagPending}
-                onToggle={changeTag}
-                onCreate={onCreateTag}
-                onUpdate={async (tag, name, color) => {
-                  const updated = await onUpdateTag(tag, name, color)
-                  setMessage((current) =>
-                    current
-                      ? {
-                          ...current,
-                          tags: current.tags?.map((value) =>
-                            value.id === updated.id ? updated : value,
-                          ),
-                        }
-                      : current,
-                  )
-                  return updated
-                }}
-                onDelete={async (tag) => {
-                  await onDeleteTag(tag)
-                  setMessage((current) =>
-                    current
-                      ? {
-                          ...current,
-                          tags: current.tags?.filter(
-                            (value) => value.id !== tag.id,
-                          ),
-                        }
-                      : current,
-                  )
-                }}
-              />
-              <StarButton
-                starred={starred}
-                label={subject}
-                pending={starPending}
-                className="message-inspector-star"
-                onChange={(value) =>
-                  void onStarChange(selected.mailbox, selected.id, value)
-                }
-              />
+              {message ? (
+                <>
+                  <TagAction
+                    tags={tags}
+                    assigned={message.tags || []}
+                    pending={tagPending}
+                    onToggle={changeTag}
+                    onCreate={onCreateTag}
+                    onUpdate={async (tag, name, color) => {
+                      const updated = await onUpdateTag(tag, name, color)
+                      setMessage((current) =>
+                        current
+                          ? {
+                              ...current,
+                              tags: current.tags?.map((value) =>
+                                value.id === updated.id ? updated : value,
+                              ),
+                            }
+                          : current,
+                      )
+                      return updated
+                    }}
+                    onDelete={async (tag) => {
+                      await onDeleteTag(tag)
+                      setMessage((current) =>
+                        current
+                          ? {
+                              ...current,
+                              tags: current.tags?.filter(
+                                (value) => value.id !== tag.id,
+                              ),
+                            }
+                          : current,
+                      )
+                    }}
+                  />
+                  <StarButton
+                    starred={starred}
+                    label={subject}
+                    pending={starPending}
+                    className="message-inspector-star"
+                    onChange={(value) =>
+                      void onStarChange(selected.mailbox, selected.id, value)
+                    }
+                  />
+                </>
+              ) : null}
+              <button
+                className="message-action-button message-text-action"
+                type="button"
+                disabled={trashPending || deletePending}
+                onClick={() => void changeTrashed(!trashMode)}
+              >
+                {trashMode ? 'Restore' : 'Move to trash'}
+              </button>
               <button
                 className="message-action-button message-delete-action"
                 type="button"
-                aria-label="Delete message"
-                title="Delete message"
-                disabled={deletePending}
+                aria-label="Delete permanently"
+                title="Delete permanently"
+                disabled={deletePending || trashPending}
                 onClick={deleteMessage}
               >
                 <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
@@ -319,6 +368,7 @@ export const MessageInspector = ({
           ) : null}
         </div>
       ) : null}
+      <StatusMessage value={messageStatus} />
       {!message ? <div className="message-empty">{loadMessage}</div> : null}
       {message && selected ? (
         <div className="message-inspector-content">
@@ -351,7 +401,6 @@ export const MessageInspector = ({
               </div>
             </div>
           </header>
-          <StatusMessage value={messageStatus} />
           <EmailRenderer
             html={html}
             text={text}
@@ -363,24 +412,53 @@ export const MessageInspector = ({
               className="message-attachments"
               aria-labelledby="message-attachments-title"
             >
-              <h3 id="message-attachments-title">Attachments</h3>
+              <div className="message-attachments-heading">
+                <h3 id="message-attachments-title">Attachments</h3>
+                <span>{attachments.length}</span>
+              </div>
               <ul>
-                {attachments.map((attachment) => (
-                  <li key={attachment.index}>
-                    <a
-                      href={api.attachmentUrl(
-                        selected.mailbox,
-                        selected.id,
-                        attachment.index,
-                      )}
-                    >
-                      {attachment.filename || 'attachment'}
-                    </a>
-                    <span>
-                      {attachment.content_type || 'application/octet-stream'}
-                    </span>
-                  </li>
-                ))}
+                {attachments.map((attachment) => {
+                  const filename = attachment.filename || 'attachment'
+                  const contentType =
+                    attachment.content_type || 'application/octet-stream'
+                  const size = fileSizeText(attachment.size)
+                  return (
+                    <li key={attachment.index}>
+                      <a
+                        href={api.attachmentUrl(
+                          selected.mailbox,
+                          selected.id,
+                          attachment.index,
+                        )}
+                        aria-label={`Download ${filename}`}
+                      >
+                        <span
+                          className="message-attachment-icon"
+                          aria-hidden="true"
+                        >
+                          <svg focusable="false" viewBox="0 0 24 24">
+                            <path d="M7 3h7l4 4v14H7zM14 3v5h5" />
+                          </svg>
+                        </span>
+                        <span className="message-attachment-details">
+                          <strong>{filename}</strong>
+                          <span className="message-attachment-metadata">
+                            <span>{contentType}</span>
+                            {size ? <span>{size}</span> : null}
+                          </span>
+                        </span>
+                        <span
+                          className="message-attachment-download"
+                          aria-hidden="true"
+                        >
+                          <svg focusable="false" viewBox="0 0 24 24">
+                            <path d="M12 4v11M8 11l4 4 4-4M5 20h14" />
+                          </svg>
+                        </span>
+                      </a>
+                    </li>
+                  )
+                })}
               </ul>
             </section>
           ) : null}

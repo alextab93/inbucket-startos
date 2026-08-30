@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { delay, http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
@@ -54,7 +54,83 @@ const paginatedMessageHandler = (
     HttpResponse.json(paginatedMessages(request, messagesFor)),
   )
 
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((complete) => {
+    resolve = complete
+  })
+  return { promise, resolve }
+}
+
 describe('mailbox workspace', () => {
+  it('closes mailbox and filter panels with focus restored', async () => {
+    const user = userEvent.setup()
+    renderApp([
+      http.get('*/v1/session', () => HttpResponse.json(session)),
+      ...catalogHandlers(
+        () => ['orders'],
+        () => [],
+      ),
+      paginatedMessageHandler((name) =>
+        messages.filter((message) => message.mailbox === name),
+      ),
+    ])
+
+    await screen.findByRole('heading', { name: 'Messages' })
+    const showControls = screen.getByRole('button', {
+      name: 'Show mailbox controls',
+    })
+    expect(showControls).toHaveAttribute('aria-expanded', 'false')
+    expect(showControls).toHaveAttribute('aria-controls', 'mailbox-controls')
+
+    await user.click(showControls)
+    const hideControls = screen.getByRole('button', {
+      name: 'Hide mailbox controls',
+    })
+    expect(hideControls).toHaveAttribute('aria-expanded', 'true')
+
+    await user.click(hideControls)
+    expect(
+      screen.getByRole('button', { name: 'Show mailbox controls' }),
+    ).toHaveAttribute('aria-expanded', 'false')
+
+    const filterTrigger = screen.getByRole('button', {
+      name: 'Filter and sort messages',
+    })
+    await user.click(filterTrigger)
+    await user.click(screen.getByRole('button', { name: 'Close filters' }))
+
+    expect(filterTrigger).toHaveAttribute('aria-expanded', 'false')
+    expect(filterTrigger).toHaveFocus()
+    expect(
+      screen.queryByRole('button', { name: 'Close filters' }),
+    ).not.toBeInTheDocument()
+
+    const manageMailboxes = screen.getByLabelText('Manage saved mailboxes')
+    await user.click(manageMailboxes)
+    expect(
+      screen.getByRole('form', { name: 'Add mailbox' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('textbox', { name: 'Mailbox name' }),
+    ).toHaveAttribute('placeholder', 'Mailbox name')
+    expect(
+      screen.getByRole('button', { name: 'Add and open mailbox' }),
+    ).toHaveTextContent('Add')
+    expect(screen.getByRole('button', { name: 'Select all' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Archive selected' }),
+    ).toBeDisabled()
+    await user.click(
+      screen.getByRole('button', { name: 'Close saved mailboxes' }),
+    )
+    expect(manageMailboxes).toHaveFocus()
+    expect(
+      screen.queryByRole('button', { name: 'Close saved mailboxes' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('combines mailboxes and filters and sorts visible messages', async () => {
     const user = userEvent.setup()
     const mailboxMessages: Record<string, MessageSummary[]> = {
@@ -177,6 +253,132 @@ describe('mailbox workspace', () => {
     ])
   })
 
+  it('restores multiple selected mailboxes and persists an explicit clear', async () => {
+    const user = userEvent.setup()
+    const handlers = [
+      http.get('*/v1/session', () => HttpResponse.json(session)),
+      ...catalogHandlers(
+        () => ['orders', 'support'],
+        () => [],
+      ),
+      paginatedMessageHandler((name) =>
+        messages.filter((message) => message.mailbox === name),
+      ),
+    ]
+    const firstRender = renderApp(handlers)
+
+    await screen.findByRole('heading', { name: 'Messages' })
+    await user.click(screen.getByLabelText('Manage saved mailboxes'))
+    await user.click(screen.getByRole('checkbox', { name: 'orders' }))
+    await user.click(screen.getByRole('checkbox', { name: 'support' }))
+    expect(await screen.findByText('2 messages in 2 mailboxes.')).toBeVisible()
+
+    const reloadPath = `${window.location.pathname}${window.location.search}`
+    firstRender.unmount()
+    const reloadedRender = renderApp(handlers, reloadPath)
+
+    expect(await screen.findByText('2 messages in 2 mailboxes.')).toBeVisible()
+    await user.click(screen.getByLabelText('Manage saved mailboxes'))
+    expect(screen.getByRole('checkbox', { name: 'orders' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'support' })).toBeChecked()
+
+    await user.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(await screen.findByText('No mailbox selected')).toBeVisible()
+    expect(window.location.search).toBe('')
+
+    reloadedRender.unmount()
+    renderApp(handlers)
+    await screen.findByRole('heading', { name: 'Messages' })
+    await user.click(screen.getByLabelText('Manage saved mailboxes'))
+    expect(screen.getByRole('checkbox', { name: 'orders' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'support' })).not.toBeChecked()
+  })
+
+  it('persists one selected mailbox before its messages finish loading', async () => {
+    const user = userEvent.setup()
+    const pendingMessages = deferred<Response>()
+    let messageRequests = 0
+    const handlers = [
+      http.get('*/v1/session', () => HttpResponse.json(session)),
+      ...catalogHandlers(
+        () => ['orders'],
+        () => [],
+      ),
+      http.get('*/v1/inbucket/messages', () => {
+        messageRequests += 1
+        if (messageRequests === 1) return pendingMessages.promise
+        return HttpResponse.json(messagePage([messages[0]]))
+      }),
+    ]
+    const firstRender = renderApp(handlers)
+
+    await screen.findByRole('heading', { name: 'Messages' })
+    await user.click(screen.getByLabelText('Manage saved mailboxes'))
+    await user.click(screen.getByRole('checkbox', { name: 'orders' }))
+    expect(window.location.search).toBe('?mailbox=orders')
+
+    const reloadPath = `${window.location.pathname}${window.location.search}`
+    firstRender.unmount()
+    renderApp(handlers, reloadPath)
+
+    expect(await screen.findByText('1 message in orders.')).toBeVisible()
+    await user.click(screen.getByLabelText('Manage saved mailboxes'))
+    expect(screen.getByRole('checkbox', { name: 'orders' })).toBeChecked()
+  })
+
+  it('restores available selections after delayed startup across repeated reloads', async () => {
+    const user = userEvent.setup()
+    const pendingSession = deferred<typeof session>()
+    const pendingCatalog = deferred<string[]>()
+    const handlers = [
+      http.get('*/v1/session', async () =>
+        HttpResponse.json(await pendingSession.promise),
+      ),
+      http.get('*/v1/inbucket/mailboxes', async ({ request }) => {
+        const archivedRequested =
+          new URL(request.url).searchParams.get('archived') === 'true'
+        return HttpResponse.json(
+          archivedRequested ? [] : await pendingCatalog.promise,
+        )
+      }),
+      paginatedMessageHandler((name) =>
+        messages.filter((message) => message.mailbox === name),
+      ),
+    ]
+    let currentRender = renderApp(
+      handlers,
+      '/?mailboxes=orders&mailboxes=missing&mailboxes=support',
+    )
+
+    expect(window.location.search).toBe(
+      '?mailboxes=orders&mailboxes=missing&mailboxes=support',
+    )
+    await act(async () => pendingSession.resolve(session))
+    expect(
+      await screen.findByRole('heading', { name: 'Messages' }),
+    ).toBeVisible()
+    await act(async () => pendingCatalog.resolve(['orders', 'support']))
+
+    expect(await screen.findByText('2 messages in 2 mailboxes.')).toBeVisible()
+    expect(window.location.search).toBe('?mailboxes=orders&mailboxes=support')
+
+    for (let reload = 0; reload < 2; reload += 1) {
+      const reloadPath = `${window.location.pathname}${window.location.search}`
+      currentRender.unmount()
+      currentRender = renderApp(handlers, reloadPath)
+      expect(
+        await screen.findByText('2 messages in 2 mailboxes.'),
+      ).toBeVisible()
+    }
+
+    await user.click(screen.getByLabelText('Manage saved mailboxes'))
+    expect(screen.getByRole('checkbox', { name: 'orders' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'support' })).toBeChecked()
+    expect(
+      screen.queryByRole('checkbox', { name: 'missing' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('filters mailbox messages by one date or an inclusive date range', async () => {
     const user = userEvent.setup()
     renderApp([
@@ -286,9 +488,24 @@ describe('mailbox workspace', () => {
     expect(screen.getByText('Showing 2 of 86 messages')).toBeVisible()
   })
 
-  it('loads the next page when the end of the message list becomes visible', async () => {
+  it('requires a new list scroll for each page and after mailbox reselection', async () => {
     const user = userEvent.setup()
     let intersect: IntersectionObserverCallback | null = null
+    const pageOneMessage = {
+      ...messages[0],
+      id: 'page-one',
+      subject: 'Page one message',
+    }
+    const pageTwoMessage = {
+      ...messages[1],
+      id: 'page-two',
+      subject: 'Page two message',
+    }
+    const pageThreeMessage = {
+      ...messages[0],
+      id: 'page-three',
+      subject: 'Page three message',
+    }
     vi.stubGlobal(
       'IntersectionObserver',
       class {
@@ -311,25 +528,37 @@ describe('mailbox workspace', () => {
     renderApp([
       http.get('*/v1/session', () => HttpResponse.json(session)),
       ...catalogHandlers(
-        () => ['orders'],
+        () => ['amazon', 'cinepolis', 'gmail', 'realtime', 'shuless', 'start9'],
         () => [],
       ),
       http.get('*/v1/inbucket/messages', ({ request }) => {
         const cursor = new URL(request.url).searchParams.get('cursor')
+        if (cursor === 'last') {
+          return HttpResponse.json(messagePage([pageThreeMessage], null, [], 3))
+        }
         return HttpResponse.json(
           cursor
-            ? messagePage([messages[1]], null, [], 2)
-            : messagePage([messages[0]], 'next', [], 2),
+            ? messagePage([pageTwoMessage], 'last', [], 3)
+            : messagePage([pageOneMessage], 'next', [], 3),
         )
       }),
     ])
 
     await screen.findByRole('heading', { name: 'Messages' })
     await user.click(screen.getByLabelText('Manage saved mailboxes'))
-    await user.click(screen.getByRole('checkbox', { name: 'orders' }))
+    const savedMailboxes = screen.getByRole('region', {
+      name: 'Saved mailboxes',
+    })
+    await user.click(
+      within(savedMailboxes).getByRole('button', { name: 'Select all' }),
+    )
     expect(
-      await screen.findByRole('button', { name: /^Unread: August invoice/ }),
+      await screen.findByRole('button', { name: /^Unread: Page one message/ }),
     ).toBeVisible()
+    const messageList = screen
+      .getByRole('region', { name: 'Messages' })
+      .querySelector<HTMLElement>('.message-list')
+    expect(messageList).not.toBeNull()
 
     await act(async () => {
       intersect?.(
@@ -339,12 +568,162 @@ describe('mailbox workspace', () => {
     })
 
     expect(
-      await screen.findByRole('button', { name: /^Read: Welcome aboard/ }),
+      screen.queryByRole('button', { name: /^Read: Page two message/ }),
+    ).not.toBeInTheDocument()
+
+    if (!messageList) throw new Error('Messages list is unavailable')
+    messageList.scrollTop = 900
+    fireEvent.scroll(messageList)
+
+    await act(async () => {
+      intersect?.(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      )
+    })
+
+    expect(
+      await screen.findByRole('button', { name: /^Read: Page two message/ }),
+    ).toBeVisible()
+
+    await act(async () => {
+      intersect?.(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      )
+      intersect?.(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      )
+    })
+
+    expect(
+      screen.queryByRole('button', { name: /^Unread: Page three message/ }),
+    ).not.toBeInTheDocument()
+
+    messageList.scrollTop = 900
+    await user.click(
+      within(savedMailboxes).getByRole('button', { name: 'Clear' }),
+    )
+    expect(
+      await screen.findByText('Select one or more mailboxes to read messages.'),
+    ).toBeVisible()
+    expect(messageList.scrollTop).toBe(0)
+
+    await user.click(
+      within(savedMailboxes).getByRole('button', { name: 'Select all' }),
+    )
+    expect(
+      await screen.findByRole('button', { name: /^Unread: Page one message/ }),
     ).toBeVisible()
     expect(
-      screen.queryByRole('button', { name: 'Load more messages' }),
+      screen.queryByRole('button', { name: /^Read: Page two message/ }),
     ).not.toBeInTheDocument()
-    expect(screen.getByText('Showing 2 of 2 messages')).toBeVisible()
+
+    await act(async () => {
+      intersect?.(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      )
+    })
+    expect(
+      screen.queryByRole('button', { name: /^Read: Page two message/ }),
+    ).not.toBeInTheDocument()
+
+    messageList.scrollTop = 900
+    fireEvent.scroll(messageList)
+    await act(async () => {
+      intersect?.(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      )
+    })
+    expect(
+      await screen.findByRole('button', {
+        name: /^Read: Page two message/,
+      }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: /^Unread: Page three message/ }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('Showing 2 of 3 messages')).toBeVisible()
+
+    messageList.scrollTop = 1800
+    fireEvent.scroll(messageList)
+    await act(async () => {
+      intersect?.(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      )
+    })
+    expect(
+      await screen.findByRole('button', {
+        name: /^Unread: Page three message/,
+      }),
+    ).toBeVisible()
+    expect(screen.getByText('Showing 3 of 3 messages')).toBeVisible()
+  })
+
+  it('ignores a stale page after the selected mailbox set changes', async () => {
+    const user = userEvent.setup()
+    const oldPage = deferred<Response>()
+    renderApp([
+      http.get('*/v1/session', () => HttpResponse.json(session)),
+      ...catalogHandlers(
+        () => ['orders', 'support'],
+        () => [],
+      ),
+      http.get('*/v1/inbucket/messages', ({ request }) => {
+        const requested = new URL(request.url).searchParams.getAll(
+          'mailboxes[]',
+        )
+        if (requested.length === 1 && requested[0] === 'orders') {
+          return oldPage.promise
+        }
+        return HttpResponse.json(
+          messagePage([
+            {
+              ...messages[1],
+              id: 'current-selection',
+              subject: 'Current selection message',
+            },
+          ]),
+        )
+      }),
+    ])
+
+    await screen.findByRole('heading', { name: 'Messages' })
+    await user.click(screen.getByLabelText('Manage saved mailboxes'))
+    await user.click(screen.getByRole('checkbox', { name: 'orders' }))
+    await user.click(screen.getByRole('checkbox', { name: 'support' }))
+    expect(
+      await screen.findByRole('button', {
+        name: /^Read: Current selection message/,
+      }),
+    ).toBeVisible()
+
+    await act(async () =>
+      oldPage.resolve(
+        HttpResponse.json(
+          messagePage([
+            {
+              ...messages[0],
+              id: 'stale-selection',
+              subject: 'Stale selection message',
+            },
+          ]),
+        ),
+      ),
+    )
+
+    expect(
+      screen.queryByRole('button', {
+        name: /^Unread: Stale selection message/,
+      }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /^Read: Current selection message/ }),
+    ).toBeVisible()
   })
 
   it('shows starred messages across mailboxes with mailbox, read, and sort controls', async () => {
@@ -538,19 +917,25 @@ describe('mailbox workspace', () => {
     ])
 
     await screen.findByRole('heading', { name: 'Messages' })
-    await user.click(screen.getByText('Add mailbox'))
+    const manageMailboxes = screen.getByLabelText('Manage saved mailboxes')
+    await user.click(manageMailboxes)
     await user.type(
       screen.getByRole('textbox', { name: 'Mailbox name' }),
       ' old-orders ',
     )
-    await user.click(screen.getByRole('button', { name: 'Add and open' }))
+    await user.click(
+      screen.getByRole('button', { name: 'Add and open mailbox' }),
+    )
 
     expect(
       await screen.findByRole('button', { name: /Unread: August invoice/ }),
     ).toBeVisible()
     expect(screen.getByText('1 message in old-orders.')).toBeVisible()
     expect(window.location.search).toBe('?mailbox=old-orders')
-    expect(screen.getByText('Add mailbox')).toHaveFocus()
+    expect(manageMailboxes).toHaveFocus()
+    expect(
+      screen.queryByRole('form', { name: 'Add mailbox' }),
+    ).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Archived' }))
     expect(screen.getByText('No archived mailboxes.')).toBeVisible()
@@ -582,11 +967,18 @@ describe('mailbox workspace', () => {
 
     await screen.findByRole('heading', { name: 'Messages' })
     await user.click(screen.getByRole('button', { name: 'Archived' }))
+    expect(await screen.findByText('1 archived mailbox')).toBeVisible()
     expect(
-      await screen.findByRole('button', { name: 'Delete mailbox' }),
+      await screen.findByRole('button', {
+        name: 'Delete old-orders permanently',
+      }),
     ).toBeVisible()
 
-    await user.click(screen.getByRole('button', { name: 'Delete mailbox' }))
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Delete old-orders permanently',
+      }),
+    )
     expect(await screen.findByText('Deleted old-orders.')).toBeVisible()
     expect(screen.getByText('No archived mailboxes.')).toBeVisible()
   })
@@ -644,11 +1036,15 @@ describe('mailbox workspace', () => {
       screen.queryByRole('region', { name: 'Messages' }),
     ).not.toBeInTheDocument()
     expect(window.location.search).toBe('?mailbox=orders&message=invoice')
-    const attachment = await screen.findByRole('link', { name: 'resume.pdf' })
+    const attachment = await screen.findByRole('link', {
+      name: 'Download resume.pdf',
+    })
     expect(attachment).toHaveAttribute(
       'href',
       '/v1/inbucket/mailboxes/orders/messages/invoice/attachments/0',
     )
+    expect(attachment).toHaveTextContent('application/pdf')
+    expect(attachment).toHaveTextContent('5 B')
 
     await user.click(screen.getByRole('button', { name: 'View source' }))
     expect(await screen.findByText(/From: billing@example.com/)).toBeVisible()
@@ -675,8 +1071,10 @@ describe('mailbox workspace', () => {
       await screen.findByRole('heading', { name: 'August invoice' }),
     ).toBeVisible()
 
-    await user.click(screen.getByRole('button', { name: 'Delete message' }))
-    expect(await screen.findByText('Message deleted.')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    expect(
+      await screen.findByText('Message deleted permanently.'),
+    ).toBeVisible()
     expect(
       screen.queryByRole('button', { name: /August invoice/ }),
     ).not.toBeInTheDocument()
@@ -696,8 +1094,9 @@ describe('mailbox workspace', () => {
       http.get('*/v1/inbucket/mailboxes/:mailbox/messages/:id', () =>
         HttpResponse.json({ ...parsedInvoice, seen: mailboxMessages[0].seen }),
       ),
-      http.get('*/v1/inbucket/mailboxes/:mailbox/messages/:id/attachments', () =>
-        HttpResponse.json([]),
+      http.get(
+        '*/v1/inbucket/mailboxes/:mailbox/messages/:id/attachments',
+        () => HttpResponse.json([]),
       ),
       http.patch('*/v1/inbucket/mailboxes/:mailbox/messages/:id/read', () => {
         mailboxMessages = mailboxMessages.map((message) => ({
@@ -769,11 +1168,10 @@ describe('mailbox workspace', () => {
     ).toBeVisible()
   })
 
-  it('retains failed mailboxes after partial archive and confirms purge', async () => {
+  it('retains failed mailboxes after partial archive', async () => {
     const user = userEvent.setup()
     let activeMailboxes = ['orders', 'support']
     let archivedMailboxes: unknown[] = []
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderApp([
       http.get('*/v1/session', () => HttpResponse.json(session)),
       ...catalogHandlers(
@@ -790,11 +1188,6 @@ describe('mailbox workspace', () => {
         }
         activeMailboxes = activeMailboxes.filter((mailbox) => mailbox !== name)
         archivedMailboxes = [{ name, message_count: 1 }]
-        return new HttpResponse(null, { status: 204 })
-      }),
-      http.delete('*/v1/inbucket/mailbox', ({ request }) => {
-        const name = new URL(request.url).searchParams.get('name') || ''
-        activeMailboxes = activeMailboxes.filter((mailbox) => mailbox !== name)
         return new HttpResponse(null, { status: 204 })
       }),
     ])
@@ -821,11 +1214,15 @@ describe('mailbox workspace', () => {
     expect(
       within(saved).getByRole('checkbox', { name: 'support' }),
     ).toBeChecked()
-
-    await user.click(screen.getByRole('button', { name: 'Delete selected' }))
-    expect(await screen.findByText('Deleted 1 mailboxes.')).toBeVisible()
     expect(
-      screen.getByText('No saved mailboxes yet. Add a mailbox to open it.'),
+      screen.queryByRole('button', { name: 'Delete selected' }),
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Archived' }))
+    expect(
+      await screen.findByRole('button', {
+        name: 'Delete orders permanently',
+      }),
     ).toBeVisible()
   })
 

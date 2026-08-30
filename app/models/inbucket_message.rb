@@ -6,6 +6,7 @@ class InbucketMessage < ApplicationRecord
   TOMBSTONE_RETENTION = 7.days
 
   has_many :starred_messages, dependent: :destroy
+  has_many :trashed_messages, dependent: :destroy
   has_many :message_tags, dependent: :destroy
   has_many :tags, through: :message_tags
 

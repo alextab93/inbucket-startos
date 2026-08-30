@@ -39,6 +39,7 @@ module V1
                             .includes(:inbucket_message)
                             .joins(:inbucket_message)
                             .merge(InbucketMessage.available)
+                            .where.not(inbucket_message_id: current_user.trashed_messages.select(:inbucket_message_id))
                             .order(updated_at: :desc)
       records = InbucketMessageDateRange.new(params).apply(records)
       summaries = records.map do |record|
@@ -109,7 +110,9 @@ module V1
       id = params.require(:id)
       upstream = inbucket.delete_message(name, id)
       if upstream.status.between?(200, 299)
-        InbucketMessage.with_mailbox_lock(name) { InbucketMessage.mark_unavailable(name, id) }
+        InbucketMessage.with_mailbox_lock(name) do
+          InbucketMessage.find_by(mailbox: name, message_id: id)&.destroy!
+        end
       end
       render_destroy_upstream(upstream)
     end

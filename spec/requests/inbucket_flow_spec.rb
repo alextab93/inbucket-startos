@@ -905,7 +905,7 @@ RSpec.describe "Inbucket flow", type: :request do
     expect(StarredMessage.find_by(inbucket_message: indexed)).to be_nil
     expect(tag.reload).to be_persisted
     expect(tag.message_tags).to be_empty
-    expect(indexed.reload.available?).to be(false)
+    expect(InbucketMessage.find_by(id: indexed.id)).to be_nil
   end
 
   it "purges a mailbox and removes it from saved mailboxes" do

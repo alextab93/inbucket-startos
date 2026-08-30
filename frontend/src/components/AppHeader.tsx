@@ -12,6 +12,7 @@ const views: Array<{ value: ViewName; label: string }> = [
   { value: 'mailboxes', label: 'Mailboxes' },
   { value: 'starred', label: 'Starred' },
   { value: 'archive', label: 'Archived' },
+  { value: 'trash', label: 'Trash' },
 ]
 
 export const AppHeader = ({

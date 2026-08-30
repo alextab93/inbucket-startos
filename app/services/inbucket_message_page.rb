@@ -39,6 +39,7 @@ class InbucketMessagePage
 
   def filtered_relation
     relation = InbucketMessage.available.where(mailbox: mailboxes)
+                               .where.not(id: user.trashed_messages.select(:inbucket_message_id))
     relation = InbucketMessageDateRange.new(params).apply(relation)
     relation = filter_seen(relation)
     relation = filter_search(relation)
