@@ -6,6 +6,8 @@ class InbucketMessage < ApplicationRecord
   TOMBSTONE_RETENTION = 7.days
 
   has_many :starred_messages, dependent: :destroy
+  has_many :message_tags, dependent: :destroy
+  has_many :tags, through: :message_tags
 
   validates :mailbox, :message_id, presence: true
   validates :message_id, uniqueness: { scope: :mailbox }
@@ -182,12 +184,13 @@ class InbucketMessage < ApplicationRecord
     end
   end
 
-  def rendered_summary(starred: false, seen: self.seen)
+  def rendered_summary(starred: false, seen: self.seen, tags: [])
     metadata.merge(
       "mailbox" => mailbox,
       "id" => message_id,
       "seen" => seen,
-      "starred" => starred
+      "starred" => starred,
+      "tags" => tags
     )
   end
 
@@ -198,6 +201,7 @@ class InbucketMessage < ApplicationRecord
   def mark_unavailable!
     transaction do
       starred_messages.destroy_all
+      message_tags.destroy_all
       update!(available: false, unavailable_at: Time.current)
     end
   end

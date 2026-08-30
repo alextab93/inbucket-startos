@@ -44,14 +44,15 @@ module V1
         message.is_a?(Hash) ? message.merge("mailbox" => mailbox) : message
       end
       starred = StarredMessage.lookup(user: current_user, messages: candidates)
-      messages.map { |message| starred_message(message, mailbox, starred) }
+      tags = Tag.lookup(user: current_user, messages: candidates)
+      messages.map { |message| message_with_user_state(message, mailbox, starred, tags) }
     end
 
-    def starred_message(message, mailbox, starred)
+    def message_with_user_state(message, mailbox, starred, tags)
       return message unless message.is_a?(Hash)
 
       key = [mailbox, message["id"].to_s]
-      message.merge("starred" => starred.key?(key))
+      message.merge("starred" => starred.key?(key), "tags" => tags.fetch(key, []))
     end
 
     def archived_mailbox(mailbox)

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ListSort, ReadFilter } from '../types'
+import type { ListSort, ReadFilter, Tag } from '../types'
 
 interface ListControlsProps {
   id: string
@@ -7,6 +7,10 @@ interface ListControlsProps {
   readFilter: ReadFilter
   mailbox: string
   mailboxOptions: string[]
+  tag: string
+  tags: Tag[]
+  dateFrom: string
+  dateTo: string
   sort: ListSort
   searchLabel: string
   searchPlaceholder: string
@@ -14,6 +18,10 @@ interface ListControlsProps {
   onSearchChange: (value: string) => void
   onReadFilterChange: (value: ReadFilter) => void
   onMailboxChange: (value: string) => void
+  onTagChange: (value: string) => void
+  onDateFromChange: (value: string) => void
+  onDateToChange: (value: string) => void
+  onDateRangeClear: () => void
   onSortChange: (value: ListSort) => void
 }
 
@@ -51,6 +59,10 @@ export const ListControls = ({
   readFilter,
   mailbox,
   mailboxOptions,
+  tag,
+  tags,
+  dateFrom,
+  dateTo,
   sort,
   searchLabel,
   searchPlaceholder,
@@ -58,6 +70,10 @@ export const ListControls = ({
   onSearchChange,
   onReadFilterChange,
   onMailboxChange,
+  onTagChange,
+  onDateFromChange,
+  onDateToChange,
+  onDateRangeClear,
   onSortChange,
 }: ListControlsProps) => {
   const [open, setOpen] = useState(false)
@@ -103,7 +119,14 @@ export const ListControls = ({
           title={triggerLabel}
           aria-expanded={open}
           aria-controls={panelId}
-          data-active={readFilter !== 'all' || mailbox || sort !== 'newest'}
+          data-active={
+            readFilter !== 'all' ||
+            mailbox ||
+            tag ||
+            dateFrom ||
+            dateTo ||
+            sort !== 'newest'
+          }
           onClick={() => setOpen((value) => !value)}
         >
           <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
@@ -145,26 +168,88 @@ export const ListControls = ({
             </label>
           </fieldset>
           {mailboxOptions.length ? (
-            <fieldset className="list-filter-section">
-              <legend>Mailbox</legend>
-              <label className="list-filter-select">
-                <span>Show messages from</span>
-                <select
-                  value={mailbox}
-                  onChange={(event) =>
-                    onMailboxChange(event.currentTarget.value)
-                  }
-                >
-                  <option value="">All mailboxes</option>
-                  {mailboxOptions.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </fieldset>
+            <>
+              <div className="list-filter-divider" />
+              <fieldset className="list-filter-section">
+                <legend>Mailbox</legend>
+                <label className="list-filter-select">
+                  <span>Show messages from</span>
+                  <select
+                    value={mailbox}
+                    onChange={(event) =>
+                      onMailboxChange(event.currentTarget.value)
+                    }
+                  >
+                    <option value="">All mailboxes</option>
+                    {mailboxOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </fieldset>
+            </>
           ) : null}
+          {tags.length ? (
+            <>
+              <div className="list-filter-divider" />
+              <fieldset className="list-filter-section">
+                <legend>Tags</legend>
+                <label className="list-filter-select">
+                  <span>Filter by tag</span>
+                  <select
+                    value={tag}
+                    onChange={(event) => onTagChange(event.currentTarget.value)}
+                  >
+                    <option value="">All tags</option>
+                    {tags.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </fieldset>
+            </>
+          ) : null}
+          <div className="list-filter-divider" />
+          <fieldset className="list-filter-section">
+            <legend>Date</legend>
+            <div className="list-filter-dates">
+              <label>
+                <span>From</span>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  max={dateTo || undefined}
+                  onChange={(event) =>
+                    onDateFromChange(event.currentTarget.value)
+                  }
+                />
+              </label>
+              <label>
+                <span>To</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={(event) =>
+                    onDateToChange(event.currentTarget.value)
+                  }
+                />
+              </label>
+            </div>
+            <button
+              className="list-filter-clear"
+              type="button"
+              disabled={!dateFrom && !dateTo}
+              onClick={onDateRangeClear}
+            >
+              Clear dates
+            </button>
+          </fieldset>
+          <div className="list-filter-divider" />
           <fieldset className="list-filter-section">
             <legend>Sort by</legend>
             {sorts.map((option) => (

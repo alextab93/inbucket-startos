@@ -1,11 +1,15 @@
 import type {
   ArchivedMailbox,
   Attachment,
+  MessageListQuery,
+  MessagePage,
   MessageSummary,
   MonitorSummary,
   ParsedMessage,
   Session,
+  Tag,
 } from './types'
+import { dateRangeInstants } from './dateRange'
 
 type ResponseType = 'json' | 'text' | 'empty' | 'blob'
 
@@ -86,6 +90,27 @@ const messagePath = (
 const deleteMessagePath = (mailbox: string, id: string | number): string =>
   `/v1/inbucket/message?name=${encode(mailbox)}&id=${encode(id)}`
 
+const messagesPath = (
+  mailboxes: string[],
+  query: MessageListQuery,
+  cursor: string | null,
+  refresh: boolean,
+): string => {
+  const params = new URLSearchParams()
+  const requestedMailboxes = query.mailbox ? [query.mailbox] : mailboxes
+  requestedMailboxes.forEach((mailbox) => params.append('mailboxes[]', mailbox))
+  if (query.search.trim()) params.set('search', query.search.trim())
+  if (query.read !== 'all') params.set('read', query.read)
+  if (query.sort !== 'newest') params.set('sort', query.sort)
+  if (query.tag) params.set('tag', query.tag)
+  const range = dateRangeInstants(query.dateFrom, query.dateTo)
+  if (range.receivedAfter) params.set('received_after', range.receivedAfter)
+  if (range.receivedBefore) params.set('received_before', range.receivedBefore)
+  if (cursor) params.set('cursor', cursor)
+  if (refresh) params.set('refresh', 'true')
+  return `/v1/inbucket/messages?${params.toString()}`
+}
+
 export const visibleError = (error: unknown, subject: string): string => {
   if (error instanceof ApiError) {
     if (error.status === 404) return `${subject} was not found.`
@@ -123,8 +148,32 @@ export const api = {
     request<ArchivedMailbox[]>('/v1/inbucket/mailboxes?archived=true', {
       signal,
     }),
+  tags: (signal?: AbortSignal) => request<Tag[]>('/v1/tags', { signal }),
+  createTag: (name: string, color: string, signal?: AbortSignal) =>
+    request<Tag>('/v1/tags', jsonOptions('POST', { name, color }, signal)),
+  updateTag: (id: number, name: string, color: string, signal?: AbortSignal) =>
+    request<Tag>(
+      `/v1/tags/${encode(id)}`,
+      jsonOptions('PATCH', { name, color }, signal),
+    ),
+  deleteTag: (id: number, signal?: AbortSignal) =>
+    request<void>(
+      `/v1/tags/${encode(id)}`,
+      jsonOptions('DELETE', undefined, signal),
+      'empty',
+    ),
   mailbox: (mailbox: string, signal?: AbortSignal) =>
     request<MessageSummary[]>(mailboxPath(mailbox), { signal }),
+  messages: (
+    mailboxes: string[],
+    query: MessageListQuery,
+    cursor: string | null,
+    refresh: boolean,
+    signal?: AbortSignal,
+  ) =>
+    request<MessagePage>(messagesPath(mailboxes, query, cursor, refresh), {
+      signal,
+    }),
   archiveMailbox: (mailbox: string, signal?: AbortSignal) =>
     request<void>(
       archiveMailboxPath(mailbox),
@@ -143,8 +192,17 @@ export const api = {
       jsonOptions('DELETE', undefined, signal),
       'empty',
     ),
-  monitorMessages: (signal?: AbortSignal) =>
-    request<MonitorSummary[]>('/v1/inbucket/monitor/messages', { signal }),
+  monitorMessages: (dateFrom = '', dateTo = '', signal?: AbortSignal) => {
+    const params = new URLSearchParams()
+    const range = dateRangeInstants(dateFrom, dateTo)
+    if (range.receivedAfter) params.set('received_after', range.receivedAfter)
+    if (range.receivedBefore)
+      params.set('received_before', range.receivedBefore)
+    const query = params.size ? `?${params.toString()}` : ''
+    return request<MonitorSummary[]>(`/v1/inbucket/monitor/messages${query}`, {
+      signal,
+    })
+  },
   message: (mailbox: string, id: string | number, signal?: AbortSignal) =>
     request<ParsedMessage>(messagePath(mailbox, id), { signal }),
   markRead: (mailbox: string, id: string | number, signal?: AbortSignal) =>
@@ -164,6 +222,17 @@ export const api = {
     request<{ starred: boolean; message?: MessageSummary }>(
       messagePath(mailbox, id, '/starred'),
       jsonOptions('PATCH', { starred }, signal),
+    ),
+  setTag: (
+    mailbox: string,
+    id: string | number,
+    tagId: number,
+    assigned: boolean,
+    signal?: AbortSignal,
+  ) =>
+    request<{ assigned: boolean; tags: Tag[] }>(
+      messagePath(mailbox, id, `/tags/${encode(tagId)}`),
+      jsonOptions('PATCH', { assigned }, signal),
     ),
   messageSource: (mailbox: string, id: string | number, signal?: AbortSignal) =>
     request<string>(messagePath(mailbox, id, '/source'), { signal }, 'text'),

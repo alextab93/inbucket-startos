@@ -4,6 +4,7 @@ import { delay, http, HttpResponse } from 'msw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   archived,
+  messagePage,
   messages,
   monitored,
   parsedInvoice,
@@ -51,9 +52,10 @@ describe('Monitor and Archived views', () => {
     expect(await screen.findByText('No archived mailboxes.')).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: 'Monitor' }))
-    expect(
-      screen.getByRole('region', { name: 'Realtime monitor' }),
-    ).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('region', { name: 'Realtime' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
     expect(
       await screen.findByText(
         'No messages have arrived since monitoring began.',
@@ -86,9 +88,11 @@ describe('Monitor and Archived views', () => {
       http.get('*/v1/session', () => HttpResponse.json(session)),
       catalogs(),
       http.get('*/v1/inbucket/monitor/messages', () =>
-        HttpResponse.json(monitored),
+        HttpResponse.json([...monitored, messages[1]]),
       ),
-      http.get('*/v1/inbucket/mailbox', () => HttpResponse.json([messages[0]])),
+      http.get('*/v1/inbucket/messages', () =>
+        HttpResponse.json(messagePage([messages[0]])),
+      ),
       http.get('*/v1/inbucket/mailboxes/:mailbox/messages/:id', () =>
         HttpResponse.json(parsedInvoice),
       ),
@@ -104,9 +108,7 @@ describe('Monitor and Archived views', () => {
 
     await screen.findByRole('heading', { name: 'Messages' })
     await user.click(screen.getByRole('button', { name: 'Monitor' }))
-    expect(
-      screen.getByRole('heading', { name: 'Realtime monitor' }),
-    ).toHaveFocus()
+    expect(screen.getByRole('heading', { name: 'Realtime' })).toHaveFocus()
     expect(
       await screen.findByRole('button', {
         name: /Unread: August invoice.*orders/,
@@ -119,13 +121,27 @@ describe('Monitor and Archived views', () => {
     const search = screen.getByRole('searchbox', {
       name: 'Search monitored messages',
     })
-    await user.type(search, 'billing')
     await user.click(
       screen.getByRole('button', {
         name: 'Filter and sort monitored messages',
       }),
     )
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Show messages from' }),
+      'support',
+    )
+    expect(
+      screen.getByRole('button', { name: /Read: Welcome aboard.*support/ }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: /August invoice/ }),
+    ).not.toBeInTheDocument()
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Show messages from' }),
+      '',
+    )
     await user.click(screen.getByRole('radio', { name: 'Unread' }))
+    await user.type(search, 'billing')
     await user.click(
       screen.getByRole('button', { name: /Unread: August invoice.*orders/ }),
     )
@@ -133,7 +149,12 @@ describe('Monitor and Archived views', () => {
     expect(
       await screen.findByRole('heading', { name: 'August invoice' }),
     ).toBeVisible()
-    expect(screen.getByRole('heading', { name: 'Messages' })).toHaveFocus()
+    expect(
+      screen.getByRole('button', { name: 'Back to message list' }),
+    ).toHaveFocus()
+    expect(
+      screen.queryByRole('region', { name: 'Messages' }),
+    ).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Monitor' }))
     expect(
@@ -145,6 +166,57 @@ describe('Monitor and Archived views', () => {
       }),
     )
     expect(screen.getByRole('radio', { name: 'Unread' })).toBeChecked()
+  })
+
+  it('filters monitored messages by date before displaying the refreshed snapshot', async () => {
+    const user = userEvent.setup()
+    renderApp([
+      http.get('*/v1/session', () => HttpResponse.json(session)),
+      catalogs(),
+      http.get('*/v1/inbucket/monitor/messages', ({ request }) => {
+        const params = new URL(request.url).searchParams
+        const receivedAfter = Date.parse(params.get('received_after') || '')
+        const receivedBefore = Date.parse(params.get('received_before') || '')
+        const response = [monitored[0], messages[1]].filter((message) => {
+          const timestamp = Date.parse(String(message.date))
+          return (
+            (!Number.isFinite(receivedAfter) || timestamp >= receivedAfter) &&
+            (!Number.isFinite(receivedBefore) || timestamp < receivedBefore)
+          )
+        })
+        return HttpResponse.json(response)
+      }),
+    ])
+
+    await screen.findByRole('heading', { name: 'Messages' })
+    await user.click(screen.getByRole('button', { name: 'Monitor' }))
+    expect(
+      await screen.findByRole('button', { name: /Read: Welcome aboard/ }),
+    ).toBeVisible()
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Filter and sort monitored messages',
+      }),
+    )
+    const filters = document.getElementById('monitor-filter-panel')
+    if (!(filters instanceof HTMLElement))
+      throw new Error('Filters are missing')
+    await user.type(within(filters).getByLabelText('From'), '2026-08-27')
+
+    expect(
+      await screen.findByRole('button', { name: /Unread: August invoice/ }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: /Read: Welcome aboard/ }),
+    ).not.toBeInTheDocument()
+
+    await user.click(
+      within(filters).getByRole('button', { name: 'Clear dates' }),
+    )
+    expect(
+      await screen.findByRole('button', { name: /Read: Welcome aboard/ }),
+    ).toBeVisible()
   })
 
   it('replaces the complete monitor snapshot and reapplies active controls', async () => {

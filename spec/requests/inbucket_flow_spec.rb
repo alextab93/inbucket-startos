@@ -57,7 +57,9 @@ RSpec.describe "Inbucket flow", type: :request do
     get "/v1/inbucket/mailbox", params: { name: mailbox }
 
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body).to eq(JSON.parse(messages.to_json).map { |item| item.merge("starred" => false) })
+    expect(response.parsed_body).to eq(
+      JSON.parse(messages.to_json).map { |item| item.merge("starred" => false, "tags" => []) }
+    )
     expect(response.headers["Cache-Control"]).to eq("private, no-store")
   end
 
@@ -70,6 +72,123 @@ RSpec.describe "Inbucket flow", type: :request do
 
     expect(response).to have_http_status(:ok)
     expect(response.parsed_body.first).to include("id" => message_id, "starred" => true)
+  end
+
+  it "returns bounded message pages without duplicates across a stable cursor" do
+    user = authenticate
+    indexed = [
+      index_message(messages.first.merge(id: "newest", date: "2026-08-11T14:00:00Z")),
+      index_message(messages.first.merge(id: "middle", date: "2026-08-11T13:00:00Z")),
+      index_message(messages.first.merge(id: "oldest", date: "2026-08-11T12:00:00Z")),
+      index_message(messages.first.merge(id: "unknown", date: "not-a-date"))
+    ]
+    StarredMessage.create!(user:, inbucket_message: indexed.second)
+
+    get "/v1/inbucket/messages", params: { mailboxes: [mailbox], limit: 2 }
+
+    expect(response).to have_http_status(:ok)
+    first_page = response.parsed_body
+    expect(first_page.fetch("messages").map { |item| item.fetch("id") }).to eq(%w[newest middle])
+    expect(first_page.fetch("messages").last).to include("starred" => true)
+    expect(first_page.fetch("next_cursor")).to be_present
+    expect(first_page.fetch("partial_mailboxes")).to eq([])
+    expect(first_page.fetch("total_count")).to eq(4)
+
+    get "/v1/inbucket/messages",
+        params: { mailboxes: [mailbox], limit: 2, cursor: first_page.fetch("next_cursor") }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("messages").map { |item| item.fetch("id") }).to eq(%w[oldest unknown])
+    expect(response.parsed_body.fetch("next_cursor")).to be_nil
+    expect(response.parsed_body.fetch("total_count")).to eq(4)
+  end
+
+  it "filters and sorts paginated messages at the Rails data boundary" do
+    authenticate
+    index_message(messages.first.merge(id: "small-unread", subject: "Invoice ready", size: 100, seen: false))
+    index_message(messages.first.merge(id: "large-unread", subject: "Invoice attached", size: 900, seen: false))
+    index_message(messages.first.merge(id: "large-read", subject: "Invoice paid", size: 1_000, seen: true))
+
+    get "/v1/inbucket/messages",
+        params: { mailboxes: [mailbox], search: "invoice", read: "unread", sort: "largest" }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("messages").map { |item| item.fetch("id") }).to eq(
+      %w[large-unread small-unread]
+    )
+    expect(response.parsed_body.fetch("total_count")).to eq(2)
+  end
+
+  it "filters paginated messages by an inclusive displayed date range" do
+    authenticate
+    index_message(messages.first.merge(id: "before", date: "2026-08-10T23:59:59Z"))
+    index_message(messages.first.merge(id: "start", date: "2026-08-11T00:00:00Z"))
+    index_message(messages.first.merge(id: "middle", date: "2026-08-11T12:00:00Z"))
+    index_message(messages.first.merge(id: "end", date: "2026-08-11T23:59:59Z"))
+    index_message(messages.first.merge(id: "after", date: "2026-08-12T00:00:00Z"))
+
+    range = {
+      mailboxes: [mailbox],
+      received_after: "2026-08-11T00:00:00Z",
+      received_before: "2026-08-12T00:00:00Z",
+      limit: 2
+    }
+    get "/v1/inbucket/messages", params: range
+
+    expect(response).to have_http_status(:ok)
+    first_page = response.parsed_body
+    expect(first_page.fetch("messages").map { |item| item.fetch("id") }).to eq(%w[end middle])
+    expect(first_page.fetch("total_count")).to eq(3)
+    expect(first_page.fetch("next_cursor")).to be_present
+
+    get "/v1/inbucket/messages", params: range.merge(cursor: first_page.fetch("next_cursor"))
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("messages").map { |item| item.fetch("id") }).to eq(["start"])
+    expect(response.parsed_body.fetch("total_count")).to eq(3)
+    expect(response.parsed_body.fetch("next_cursor")).to be_nil
+  end
+
+  it "rejects an invalid message date range" do
+    authenticate
+
+    get "/v1/inbucket/messages",
+        params: {
+          mailboxes: [mailbox],
+          received_after: "2026-08-12T00:00:00Z",
+          received_before: "2026-08-11T00:00:00Z"
+        }
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body).to eq("error" => "invalid_request")
+
+    get "/v1/inbucket/messages",
+        params: { mailboxes: [mailbox], received_after: "not-a-time" }
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body).to eq("error" => "invalid_request")
+  end
+
+  it "returns cached messages and identifies mailboxes that could not be refreshed" do
+    authenticate
+    index_message(messages.first)
+    stub_request(:get, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}")
+      .to_return(status: 503, body: "unavailable")
+
+    get "/v1/inbucket/messages", params: { mailboxes: [mailbox], refresh: true }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("messages").first).to include("id" => message_id)
+    expect(response.parsed_body.fetch("partial_mailboxes")).to eq([mailbox])
+  end
+
+  it "rejects an invalid message pagination cursor" do
+    authenticate
+
+    get "/v1/inbucket/messages", params: { mailboxes: [mailbox], cursor: "invalid" }
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body).to eq("error" => "invalid_request")
   end
 
   it "stars and unstars an existing message idempotently" do
@@ -289,6 +408,25 @@ RSpec.describe "Inbucket flow", type: :request do
     )
   end
 
+  it "filters the signed-in user's starred messages by received time" do
+    user = authenticate
+    older = index_message(messages.first.merge(id: "older", date: "2026-08-10T12:00:00Z"))
+    matching = index_message(messages.first.merge(id: "matching", date: "2026-08-11T12:00:00Z"))
+    StarredMessage.create!(user:, inbucket_message: older)
+    StarredMessage.create!(user:, inbucket_message: matching)
+
+    get "/v1/inbucket/starred/messages",
+        params: {
+          received_after: "2026-08-11T00:00:00Z",
+          received_before: "2026-08-12T00:00:00Z"
+        }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to contain_exactly(
+      include("mailbox" => mailbox, "id" => "matching", "starred" => true)
+    )
+  end
+
   it "does not return stars for unavailable messages" do
     user = authenticate
     indexed = index_message(messages.first)
@@ -325,7 +463,9 @@ RSpec.describe "Inbucket flow", type: :request do
 
   it "returns recent monitor message summaries from shared metadata" do
     user = authenticate
-    index_message(monitor_header.merge("seen" => true), source: :monitor)
+    monitored = index_message(monitor_header.merge("seen" => true), source: :monitor)
+    tag = user.tags.create!(name: "Revelo", color: "#1D4ED8")
+    tag.message_tags.create!(inbucket_message: monitored)
     unread_header = monitor_header.merge("id" => "second", "seen" => false)
     unread = index_message(unread_header, source: :monitor)
     StarredMessage.create!(user:, inbucket_message: unread)
@@ -334,8 +474,39 @@ RSpec.describe "Inbucket flow", type: :request do
 
     expect(response).to have_http_status(:ok)
     messages_by_id = response.parsed_body.index_by { |message| message.fetch("id") }
-    expect(messages_by_id.fetch(message_id)).to include("seen" => true, "starred" => false)
+    expect(messages_by_id.fetch(message_id)).to include(
+      "seen" => true,
+      "starred" => false,
+      "tags" => [include("id" => tag.id, "name" => "Revelo")]
+    )
     expect(messages_by_id.fetch("second")).to include("seen" => false, "starred" => true)
+  end
+
+  it "applies the monitor date range before its result limit" do
+    authenticate
+    Mailbox.record(mailbox)
+    recent = 200.times.map do |index|
+      monitor_header.merge(
+        "id" => "recent-#{index}",
+        "date" => "2026-08-12T12:00:00Z"
+      )
+    end
+    InbucketMessage.record_many(recent, source: :monitor)
+    index_message(
+      monitor_header.merge("id" => "matching", "date" => "2026-08-11T12:00:00Z"),
+      source: :monitor
+    )
+
+    get "/v1/inbucket/monitor/messages",
+        params: {
+          received_after: "2026-08-11T00:00:00Z",
+          received_before: "2026-08-12T00:00:00Z"
+        }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to contain_exactly(
+      include("mailbox" => mailbox, "id" => "matching")
+    )
   end
 
   it "returns cached monitor summaries while upstream is unavailable" do
@@ -388,13 +559,21 @@ RSpec.describe "Inbucket flow", type: :request do
 
   it "returns a parsed message" do
     user = authenticate
-    StarredMessage.create!(user:, inbucket_message: index_message(messages.first))
+    indexed = index_message(messages.first)
+    StarredMessage.create!(user:, inbucket_message: indexed)
+    tag = user.tags.create!(name: "Revelo", color: "#1D4ED8")
+    tag.message_tags.create!(inbucket_message: indexed)
     stub_json("/api/v1/mailbox/#{mailbox}/#{message_id}", message)
 
     get "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}"
 
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body).to eq(JSON.parse(message.to_json).merge("starred" => true))
+    expect(response.parsed_body).to eq(
+      JSON.parse(message.to_json).merge(
+        "starred" => true,
+        "tags" => [{ "id" => tag.id, "name" => "Revelo", "color" => "#1D4ED8" }]
+      )
+    )
   end
 
   it "returns message source as plain text" do
@@ -579,6 +758,8 @@ RSpec.describe "Inbucket flow", type: :request do
     user = authenticate
     indexed = index_message(monitor_header, source: :monitor)
     StarredMessage.create!(user:, inbucket_message: indexed)
+    tag = user.tags.create!(name: "Reusable", color: "#A16207")
+    tag.message_tags.create!(inbucket_message: indexed)
     stub_request(:delete, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}/#{message_id}")
       .to_return(status: 200, body: '"OK"', headers: { "Content-Type" => "application/json" })
 
@@ -586,6 +767,8 @@ RSpec.describe "Inbucket flow", type: :request do
 
     expect(response).to have_http_status(:no_content)
     expect(StarredMessage.find_by(inbucket_message: indexed)).to be_nil
+    expect(tag.reload).to be_persisted
+    expect(tag.message_tags).to be_empty
     expect(indexed.reload.available?).to be(false)
   end
 

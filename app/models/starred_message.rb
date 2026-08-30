@@ -28,6 +28,8 @@ class StarredMessage < ApplicationRecord
   private_class_method :identity_keys, :matching_records
 
   def rendered_summary
-    inbucket_message.rendered_summary(starred: true)
+    tags = Tag.lookup(user:, messages: [inbucket_message.rendered_summary])
+    key = [inbucket_message.mailbox, inbucket_message.message_id]
+    inbucket_message.rendered_summary(starred: true, tags: tags.fetch(key, []))
   end
 end

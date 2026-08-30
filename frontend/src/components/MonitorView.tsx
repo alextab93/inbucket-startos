@@ -12,26 +12,34 @@ import type {
   MonitorSummary,
   ReadFilter,
   StatusValue,
+  Tag,
 } from '../types'
 import { ListControls } from './ListControls'
+import { TagBadges } from './MessageTags'
 import { StatusMessage } from './StatusMessage'
 
 interface MonitorViewProps {
   active: boolean
   onUnauthorized: () => void
   onOpenMessage: (message: MonitorSummary) => Promise<void>
+  tags: Tag[]
 }
 
 export const MonitorView = ({
   active,
   onUnauthorized,
   onOpenMessage,
+  tags,
 }: MonitorViewProps) => {
   const [messages, setMessages] = useState<MonitorSummary[]>([])
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState<StatusValue>({ message: '' })
   const [search, setSearch] = useState('')
   const [readFilter, setReadFilter] = useState<ReadFilter>('all')
+  const [mailbox, setMailbox] = useState('')
+  const [tag, setTag] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [sort, setSort] = useState<ListSort>('newest')
 
   useEffect(() => {
@@ -45,10 +53,15 @@ export const MonitorView = ({
       const current = controller
       if (initial) {
         setLoading(true)
+        setMessages([])
         setStatus({ message: 'Loading monitored messages.', state: 'loading' })
       }
       try {
-        const result = await api.monitorMessages(current.signal)
+        const result = await api.monitorMessages(
+          dateFrom,
+          dateTo,
+          current.signal,
+        )
         if (!Array.isArray(result) || disposed || controller !== current) return
         setMessages(result)
         setStatus({
@@ -76,10 +89,25 @@ export const MonitorView = ({
       controller?.abort()
       window.clearInterval(interval)
     }
-  }, [active, onUnauthorized])
+  }, [active, dateFrom, dateTo, onUnauthorized])
 
+  useEffect(() => {
+    if (tag && !tags.some((value) => String(value.id) === tag)) setTag('')
+  }, [tag, tags])
+
+  const mailboxes = [...new Set(messages.map((message) => message.mailbox))]
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right))
   const visibleMessages = sortMessages(
-    filterMessages(messages, search, readFilter),
+    filterMessages(
+      messages,
+      search,
+      readFilter,
+      mailbox,
+      tag,
+      dateFrom,
+      dateTo,
+    ),
     sort,
   )
 
@@ -90,34 +118,40 @@ export const MonitorView = ({
       hidden={!active}
       aria-busy={loading}
     >
-      <div className="monitor-heading">
-        <div>
-          <h2 id="monitor-title" tabIndex={-1}>
-            Realtime monitor
-          </h2>
-          <p>
-            Recent deliveries from the Inbucket monitor. Message bodies are not
-            stored here.
-          </p>
-        </div>
-        <StatusMessage value={status} />
-      </div>
-      <div className="monitor-tools">
+      <div className="message-list-heading monitor-list-heading">
+        <h2 id="monitor-title" tabIndex={-1}>
+          Realtime
+        </h2>
         <ListControls
           id="monitor"
           search={search}
           readFilter={readFilter}
-          mailbox=""
-          mailboxOptions={[]}
+          mailbox={mailbox}
+          mailboxOptions={mailboxes}
+          tag={tag}
+          tags={tags}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
           sort={sort}
           searchLabel="Search monitored messages"
           searchPlaceholder="Search monitored messages"
           triggerLabel="Filter and sort monitored messages"
           onSearchChange={setSearch}
           onReadFilterChange={setReadFilter}
-          onMailboxChange={() => undefined}
+          onMailboxChange={setMailbox}
+          onTagChange={setTag}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+          onDateRangeClear={() => {
+            setDateFrom('')
+            setDateTo('')
+          }}
           onSortChange={setSort}
         />
+      </div>
+      <div className="monitor-status-row">
+        <p>Recent deliveries. Message bodies are not stored here.</p>
+        <StatusMessage value={status} />
       </div>
       <div className="monitor-message-list">
         {loading && !messages.length ? (
@@ -130,7 +164,7 @@ export const MonitorView = ({
         ) : null}
         {messages.length > 0 && visibleMessages.length === 0 ? (
           <p className="monitor-message-empty">
-            {emptyListText('monitored messages', search, readFilter)}
+            {emptyListText('monitored messages', search, readFilter, mailbox)}
           </p>
         ) : null}
         {visibleMessages.map((message) => {
@@ -138,7 +172,8 @@ export const MonitorView = ({
           const date = dateText(message.date)
           const sender = formatValue(message.from) || 'Unknown sender'
           const subject = formatValue(message.subject) || '(No subject)'
-          const summary = `${subject}, ${sender}, ${message.mailbox}, ${date}`
+          const tags = message.tags?.map((tag) => tag.name).join(', ')
+          const summary = `${subject}, ${sender}, ${message.mailbox}, ${date}${tags ? `, tags: ${tags}` : ''}`
           return (
             <button
               key={`${message.mailbox}\u0000${message.id}`}
@@ -150,7 +185,10 @@ export const MonitorView = ({
               <span>{date}</span>
               <span>{sender}</span>
               <span>{message.mailbox}</span>
-              <span className="monitor-message-subject">{subject}</span>
+              <span className="monitor-message-subject">
+                <span>{subject}</span>
+                <TagBadges tags={message.tags || []} maxVisible={1} />
+              </span>
             </button>
           )
         })}

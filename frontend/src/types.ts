@@ -12,6 +12,22 @@ export type ReadFilter = 'all' | 'read' | 'unread'
 
 export type ListSort = 'newest' | 'oldest' | 'largest' | 'smallest'
 
+export interface MessageListQuery {
+  search: string
+  read: ReadFilter
+  mailbox: string
+  tag: string
+  dateFrom: string
+  dateTo: string
+  sort: ListSort
+}
+
+export interface Tag {
+  id: number
+  name: string
+  color: string
+}
+
 export type HeaderValue =
   | string
   | number
@@ -46,8 +62,16 @@ export interface MessageSummary {
   size?: number | string | null
   seen?: boolean | unknown
   starred?: boolean | unknown
+  tags?: Tag[]
   'posix-millis'?: number | string
   header?: Record<string, HeaderValue>
+}
+
+export interface MessagePage {
+  messages: MessageSummary[]
+  next_cursor: string | null
+  partial_mailboxes: string[]
+  total_count: number
 }
 
 export interface ParsedMessage extends MessageSummary {

@@ -1,10 +1,23 @@
 import type {
   ArchivedMailbox,
+  MessagePage,
   MessageSummary,
   MonitorSummary,
   ParsedMessage,
   Session,
 } from '../types'
+
+export const messagePage = (
+  pageMessages: MessageSummary[],
+  nextCursor: string | null = null,
+  partialMailboxes: string[] = [],
+  totalCount = pageMessages.length,
+): MessagePage => ({
+  messages: pageMessages,
+  next_cursor: nextCursor,
+  partial_mailboxes: partialMailboxes,
+  total_count: totalCount,
+})
 
 export const session: Session = {
   authenticated: true,

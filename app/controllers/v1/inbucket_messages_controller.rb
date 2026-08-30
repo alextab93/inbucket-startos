@@ -4,6 +4,15 @@ module V1
   class InbucketMessagesController < InbucketController
     INLINE_IMAGE_TYPES = %w[image/avif image/bmp image/gif image/jpeg image/png image/webp].freeze
 
+    def index
+      mailboxes = requested_mailboxes
+      partial_mailboxes = refresh_mailboxes(mailboxes)
+      page = InbucketMessagePage.new(user: current_user, mailboxes:, params:).call
+      render json: page.merge(partial_mailboxes:)
+    rescue InbucketMessagePage::InvalidRequest, InbucketMessageDateRange::InvalidRequest
+      render json: { error: "invalid_request" }, status: :unprocessable_content
+    end
+
     def show
       name = params.require(:name)
       id = params.require(:id)
@@ -13,7 +22,8 @@ module V1
 
       indexed = indexed_message(name, id, upstream.body)
       starred = current_user.starred_messages.exists?(inbucket_message: indexed)
-      render json: upstream.body.merge("starred" => starred), status: upstream.status
+      tags = tags_for(indexed)
+      render json: upstream.body.merge("starred" => starred, "tags" => tags), status: upstream.status
     end
 
     def mark_read
@@ -30,7 +40,14 @@ module V1
                             .joins(:inbucket_message)
                             .merge(InbucketMessage.available)
                             .order(updated_at: :desc)
-      render json: records.map(&:rendered_summary)
+      records = InbucketMessageDateRange.new(params).apply(records)
+      summaries = records.map do |record|
+        record.inbucket_message.rendered_summary(starred: true)
+      end
+      tags = Tag.lookup(user: current_user, messages: summaries)
+      render json: summaries.map { |message| with_tags(message, tags) }
+    rescue InbucketMessageDateRange::InvalidRequest
+      render json: { error: "invalid_request" }, status: :unprocessable_content
     end
 
     def update_starred
@@ -99,6 +116,24 @@ module V1
 
     private
 
+    def requested_mailboxes
+      names = Array(params[:mailboxes]).map { |name| name.to_s.strip }.reject(&:empty?).uniq
+      raise InbucketMessagePage::InvalidRequest if names.empty? || names.length > 50
+
+      names
+    end
+
+    def refresh_mailboxes(mailboxes)
+      return [] unless params[:refresh] == "true" && params[:cursor].blank?
+
+      mailboxes.filter_map do |mailbox|
+        result = InbucketMailboxSync.new(client: inbucket).call(mailbox)
+        mailbox unless result.response.status.between?(200, 299)
+      rescue InbucketClient::Unavailable, InbucketClient::InvalidResponse
+        mailbox
+      end
+    end
+
     def add_star(name, id)
       upstream, record = InbucketMessage.with_mailbox_lock(name) do
         response = inbucket.message(name, id)
@@ -124,6 +159,18 @@ module V1
 
     def indexed_message(name, id, body)
       InbucketMessage.with_mailbox_lock(name) { record_indexed_message(name, id, body) }
+    end
+
+    def tags_for(message)
+      current_user.tags.joins(:message_tags)
+                  .where(message_tags: { inbucket_message: message })
+                  .ordered
+                  .map(&:rendered)
+    end
+
+    def with_tags(message, tags)
+      key = [message["mailbox"], message["id"]]
+      message.merge("tags" => tags.fetch(key, []))
     end
 
     def record_indexed_message(name, id, body)

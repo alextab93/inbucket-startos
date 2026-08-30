@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   accessibleSummary,
   dateText,
@@ -9,13 +9,18 @@ import {
 } from '../formatting'
 import type {
   ListSort,
+  MessageListQuery,
   MessageSummary,
   ReadFilter,
   SelectedMessage,
+  StatusValue,
+  Tag,
 } from '../types'
 import { ListControls } from './ListControls'
 import { StarButton } from './StarButton'
 import { MessageInspector } from './MessageInspector'
+import { StatusMessage } from './StatusMessage'
+import { TagBadges } from './MessageTags'
 
 interface MessageWorkspaceProps {
   messages: MessageSummary[]
@@ -26,13 +31,32 @@ interface MessageWorkspaceProps {
   controlsId?: string
   headingId?: string
   heading?: string
+  status?: StatusValue
   mailboxOptions?: string[]
+  tags?: Tag[]
+  query?: MessageListQuery
+  hasMore?: boolean
+  totalCount?: number
+  loadingMore?: boolean
+  onQueryChange?: (query: MessageListQuery) => void
+  onLoadMore?: () => void
   onSelectMessage: (mailbox: string, id: string) => void
+  onCloseMessage: () => void
   onUnauthorized: () => void
   onRead: (mailbox: string, id: string) => void
   starPending: (mailbox: string, id: string) => boolean
   onStarChange: (mailbox: string, id: string, starred: boolean) => Promise<void>
   onDeleted: () => Promise<void>
+  tagPending: boolean
+  onTagChange: (
+    mailbox: string,
+    id: string,
+    tag: Tag,
+    assigned: boolean,
+  ) => Promise<Tag[]>
+  onCreateTag: (name: string, color: string) => Promise<Tag>
+  onUpdateTag: (tag: Tag, name: string, color: string) => Promise<Tag>
+  onDeleteTag: (tag: Tag) => Promise<void>
 }
 
 export const MessageWorkspace = ({
@@ -44,22 +68,68 @@ export const MessageWorkspace = ({
   controlsId = 'message',
   headingId = 'mailbox-title',
   heading = 'Messages',
+  status = { message: '' },
   mailboxOptions = [],
+  tags = [],
+  query,
+  hasMore = false,
+  totalCount,
+  loadingMore = false,
+  onQueryChange,
+  onLoadMore,
   onSelectMessage,
+  onCloseMessage,
   onUnauthorized,
   onRead,
   starPending,
   onStarChange,
   onDeleted,
+  tagPending,
+  onTagChange,
+  onCreateTag,
+  onUpdateTag,
+  onDeleteTag,
 }: MessageWorkspaceProps) => {
   const [search, setSearch] = useState('')
   const [readFilter, setReadFilter] = useState<ReadFilter>('all')
   const [mailbox, setMailbox] = useState('')
+  const [tag, setTag] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [sort, setSort] = useState<ListSort>('newest')
-  const visibleMessages = sortMessages(
-    filterMessages(messages, search, readFilter, mailbox),
+  const hadSelection = useRef(Boolean(selected))
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+  const activeQuery = query || {
+    search,
+    read: readFilter,
+    mailbox,
+    tag,
+    dateFrom,
+    dateTo,
     sort,
+  }
+  const hasActiveQuery = Boolean(
+    activeQuery.search.trim() ||
+    activeQuery.read !== 'all' ||
+    activeQuery.mailbox ||
+    activeQuery.tag ||
+    activeQuery.dateFrom ||
+    activeQuery.dateTo,
   )
+  const visibleMessages = query
+    ? messages
+    : sortMessages(
+        filterMessages(
+          messages,
+          search,
+          readFilter,
+          mailbox,
+          tag,
+          dateFrom,
+          dateTo,
+        ),
+        sort,
+      )
   const selectedMessage = selected
     ? messages.find(
         (message) =>
@@ -67,40 +137,142 @@ export const MessageWorkspace = ({
           String(message.id) === selected.id,
       )
     : undefined
+  const showsMailbox =
+    new Set(messages.map((message) => message.mailbox)).size > 1
+  const layoutClass = [
+    'mailbox-layout',
+    selected ? 'message-inspector-open' : 'message-list-expanded',
+    !selected && showsMailbox ? 'message-list-multi-mailbox' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  useEffect(() => {
+    if (hadSelection.current && !selected) {
+      document.getElementById(headingId)?.focus()
+    }
+    hadSelection.current = Boolean(selected)
+  }, [headingId, selected])
+
+  useEffect(() => {
+    if (
+      !hasMore ||
+      loadingMore ||
+      !onLoadMore ||
+      !loadMoreRef.current ||
+      typeof IntersectionObserver === 'undefined'
+    )
+      return
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) onLoadMore()
+    })
+    observer.observe(loadMoreRef.current)
+    return () => observer.disconnect()
+  }, [hasMore, loadingMore, onLoadMore])
+
+  useEffect(() => {
+    if (!query && tag && !tags.some((value) => String(value.id) === tag)) {
+      setTag('')
+    }
+  }, [query, tag, tags])
+
+  const updateQuery = (next: Partial<MessageListQuery>) => {
+    const value = { ...activeQuery, ...next }
+    if (onQueryChange) onQueryChange(value)
+  }
 
   return (
-    <div className="mailbox-layout">
-      <section className="message-list-panel" aria-labelledby={headingId}>
+    <div className={layoutClass}>
+      <section
+        className="message-list-panel"
+        aria-labelledby={headingId}
+        hidden={Boolean(selected)}
+      >
         <div className="message-list-heading">
           <h2 id={headingId} tabIndex={-1}>
             {heading}
           </h2>
           <ListControls
             id={controlsId}
-            search={search}
-            readFilter={readFilter}
-            mailbox={mailbox}
+            search={activeQuery.search}
+            readFilter={activeQuery.read}
+            mailbox={activeQuery.mailbox}
             mailboxOptions={mailboxOptions}
-            sort={sort}
+            tag={activeQuery.tag}
+            tags={tags}
+            dateFrom={activeQuery.dateFrom}
+            dateTo={activeQuery.dateTo}
+            sort={activeQuery.sort}
             searchLabel="Search messages"
             searchPlaceholder="Search messages"
             triggerLabel="Filter and sort messages"
-            onSearchChange={setSearch}
-            onReadFilterChange={setReadFilter}
-            onMailboxChange={setMailbox}
-            onSortChange={setSort}
+            onSearchChange={(value) => {
+              setSearch(value)
+              updateQuery({ search: value })
+            }}
+            onReadFilterChange={(value) => {
+              setReadFilter(value)
+              updateQuery({ read: value })
+            }}
+            onMailboxChange={(value) => {
+              setMailbox(value)
+              updateQuery({ mailbox: value })
+            }}
+            onTagChange={(value) => {
+              setTag(value)
+              updateQuery({ tag: value })
+            }}
+            onDateFromChange={(value) => {
+              setDateFrom(value)
+              updateQuery({ dateFrom: value })
+            }}
+            onDateToChange={(value) => {
+              setDateTo(value)
+              updateQuery({ dateTo: value })
+            }}
+            onDateRangeClear={() => {
+              setDateFrom('')
+              setDateTo('')
+              updateQuery({ dateFrom: '', dateTo: '' })
+            }}
+            onSortChange={(value) => {
+              setSort(value)
+              updateQuery({ sort: value })
+            }}
           />
         </div>
+        <StatusMessage value={status} className="message-list-status" />
         <div className="message-list">
           {loading ? (
             <p className="message-list-empty">Loading messages.</p>
           ) : null}
           {!loading && !messages.length ? (
-            <p className="message-list-empty">{listEmptyMessage}</p>
+            <p className="message-list-empty">
+              {query && hasActiveQuery
+                ? emptyListText(
+                    'messages',
+                    activeQuery.search,
+                    activeQuery.read,
+                    activeQuery.mailbox,
+                    activeQuery.tag,
+                    activeQuery.dateFrom,
+                    activeQuery.dateTo,
+                  )
+                : listEmptyMessage}
+            </p>
           ) : null}
           {!loading && messages.length > 0 && !visibleMessages.length ? (
             <p className="message-list-empty">
-              {emptyListText('messages', search, readFilter, mailbox)}
+              {emptyListText(
+                'messages',
+                activeQuery.search,
+                activeQuery.read,
+                activeQuery.mailbox,
+                activeQuery.tag,
+                activeQuery.dateFrom,
+                activeQuery.dateTo,
+              )}
             </p>
           ) : null}
           {!loading
@@ -122,11 +294,17 @@ export const MessageWorkspace = ({
                       aria-current={current ? 'true' : undefined}
                       onClick={() => onSelectMessage(message.mailbox, id)}
                     >
-                      <strong>
-                        {formatValue(message.subject) || '(No subject)'}
-                      </strong>
-                      <span>
+                      <span className="message-summary-subject">
+                        <TagBadges tags={message.tags || []} maxVisible={1} />
+                        <strong>
+                          {formatValue(message.subject) || '(No subject)'}
+                        </strong>
+                      </span>
+                      <span className="message-summary-sender">
                         {formatValue(message.from) || 'Unknown sender'}
+                      </span>
+                      <span className="message-summary-mailbox">
+                        {message.mailbox}
                       </span>
                       <time>{dateText(message.date)}</time>
                     </button>
@@ -143,20 +321,46 @@ export const MessageWorkspace = ({
                 )
               })
             : null}
+          {typeof totalCount === 'number' && totalCount > 0 ? (
+            <div ref={loadMoreRef} className="message-list-progress">
+              <p aria-live="polite">
+                Showing {visibleMessages.length} of {totalCount}{' '}
+                {totalCount === 1 ? 'message' : 'messages'}
+              </p>
+              {hasMore ? (
+                <button
+                  type="button"
+                  disabled={loadingMore}
+                  onClick={onLoadMore}
+                >
+                  {loadingMore
+                    ? 'Loading more messages.'
+                    : 'Load more messages'}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </section>
-      <MessageInspector
-        selected={selected}
-        emptyMessage={inspectorEmptyMessage}
-        onUnauthorized={onUnauthorized}
-        onRead={onRead}
-        starred={selectedMessage?.starred === true}
-        starPending={
-          selected ? starPending(selected.mailbox, selected.id) : false
-        }
-        onStarChange={onStarChange}
-        onDeleted={onDeleted}
-      />
+      {selected ? (
+        <MessageInspector
+          selected={selected}
+          emptyMessage={inspectorEmptyMessage}
+          onUnauthorized={onUnauthorized}
+          onRead={onRead}
+          starred={selectedMessage?.starred === true}
+          starPending={starPending(selected.mailbox, selected.id)}
+          onClose={onCloseMessage}
+          onStarChange={onStarChange}
+          onDeleted={onDeleted}
+          tags={tags}
+          tagPending={tagPending}
+          onTagChange={onTagChange}
+          onCreateTag={onCreateTag}
+          onUpdateTag={onUpdateTag}
+          onDeleteTag={onDeleteTag}
+        />
+      ) : null}
     </div>
   )
 }

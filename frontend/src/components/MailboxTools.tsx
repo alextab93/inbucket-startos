@@ -112,7 +112,7 @@ export const MailboxTools = ({
           )
         }
       >
-        <summary>Manage mailboxes</summary>
+        <summary aria-label="Manage saved mailboxes">Mailboxes</summary>
         <section
           className="mailbox-selector"
           aria-labelledby="saved-mailboxes-title"
@@ -171,7 +171,7 @@ export const MailboxTools = ({
                       toggleMailbox(mailbox, event.currentTarget.checked)
                     }
                   />
-                  <span>{mailbox}</span>
+                  <span title={mailbox}>{mailbox}</span>
                 </label>
               ))
             ) : (

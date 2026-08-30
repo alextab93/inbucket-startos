@@ -8,6 +8,7 @@ afterEach(() => {
   cleanup()
   server.resetHandlers()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   window.history.replaceState(null, '', '/')
 })
 afterAll(() => server.close())

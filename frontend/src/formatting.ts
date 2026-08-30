@@ -1,4 +1,5 @@
 import type { HeaderValue, ListSort, MessageSummary, ReadFilter } from './types'
+import { withinDateRange } from './dateRange'
 
 export const formatValue = (value: HeaderValue): string => {
   if (Array.isArray(value))
@@ -101,6 +102,9 @@ export const filterMessages = <T extends MessageSummary>(
   search: string,
   readFilter: ReadFilter,
   mailbox = '',
+  tag = '',
+  dateFrom = '',
+  dateTo = '',
 ): T[] => {
   const query = search.trim().toLocaleLowerCase()
   return messages.filter((message) => {
@@ -109,7 +113,16 @@ export const filterMessages = <T extends MessageSummary>(
       readFilter === 'all' ||
       (message.seen === true) === (readFilter === 'read')
     const matchesMailbox = !mailbox || message.mailbox === mailbox
-    return matchesSearch && matchesRead && matchesMailbox
+    const matchesTag =
+      !tag || message.tags?.some((candidate) => String(candidate.id) === tag)
+    const matchesDate = withinDateRange(timestamp(message), dateFrom, dateTo)
+    return (
+      matchesSearch &&
+      matchesRead &&
+      matchesMailbox &&
+      matchesTag &&
+      matchesDate
+    )
   })
 }
 
@@ -118,13 +131,23 @@ export const emptyListText = (
   query: string,
   readFilter: ReadFilter,
   mailbox = '',
+  tag = '',
+  dateFrom = '',
+  dateTo = '',
 ): string => {
   const searched = Boolean(query.trim())
-  const filtered = readFilter !== 'all' || Boolean(mailbox)
+  const filtered =
+    readFilter !== 'all' ||
+    Boolean(mailbox) ||
+    Boolean(tag) ||
+    Boolean(dateFrom) ||
+    Boolean(dateTo)
   if (searched && filtered) return `No ${noun} match your search and filters.`
   if (searched) return `No ${noun} match your search.`
   return `No ${noun} match the selected filters.`
 }
 
-export const accessibleSummary = (message: MessageSummary): string =>
-  `${formatValue(message.subject) || '(No subject)'}, ${formatValue(message.from) || 'Unknown sender'}, ${dateText(message.date)}`
+export const accessibleSummary = (message: MessageSummary): string => {
+  const tags = message.tags?.map((tag) => tag.name).join(', ')
+  return `${formatValue(message.subject) || '(No subject)'}, ${formatValue(message.from) || 'Unknown sender'}, ${dateText(message.date)}${tags ? `, tags: ${tags}` : ''}`
+}

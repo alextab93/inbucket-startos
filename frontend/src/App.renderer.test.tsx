@@ -2,7 +2,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
-import { session } from './test/fixtures'
+import { messagePage, session } from './test/fixtures'
 import { renderApp } from './test/renderApp'
 import type { MessageSummary, ParsedMessage } from './types'
 
@@ -25,7 +25,9 @@ const rendererHandlers = (summary: MessageSummary, message: ParsedMessage) => [
       new URL(request.url).searchParams.get('archived') === 'true'
     return HttpResponse.json(archived ? [] : ['orders'])
   }),
-  http.get('*/v1/inbucket/mailbox', () => HttpResponse.json([summary])),
+  http.get('*/v1/inbucket/messages', () =>
+    HttpResponse.json(messagePage([summary])),
+  ),
   http.get('*/v1/inbucket/mailboxes/:mailbox/messages/:id', () =>
     HttpResponse.json(message),
   ),

@@ -15,11 +15,17 @@ describe('typed authenticated workspace', () => {
           listEmptyMessage="This mailbox has no messages."
           inspectorEmptyMessage="Select a message to read it."
           onSelectMessage={vi.fn()}
+          onCloseMessage={vi.fn()}
           onUnauthorized={vi.fn()}
           onRead={vi.fn()}
           starPending={() => false}
           onStarChange={async () => {}}
           onDeleted={async () => {}}
+          tagPending={false}
+          onTagChange={async () => []}
+          onCreateTag={async () => ({ id: 1, name: 'Tag', color: '#1D4ED8' })}
+          onUpdateTag={async (tag) => tag}
+          onDeleteTag={async () => {}}
         />
       </StrictMode>,
     )
@@ -31,6 +37,8 @@ describe('typed authenticated workspace', () => {
     expect(
       within(list).getByRole('button', { name: /Read: Welcome aboard/ }),
     ).toBeVisible()
-    expect(screen.getByText('Select a message to read it.')).toBeVisible()
+    expect(within(list).getByText('orders')).toBeVisible()
+    expect(within(list).getByText('support')).toBeVisible()
+    expect(screen.queryByLabelText('Message inspector')).not.toBeInTheDocument()
   })
 })

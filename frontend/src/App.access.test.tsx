@@ -2,7 +2,7 @@ import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
-import { session } from './test/fixtures'
+import { messagePage, messages, parsedInvoice, session } from './test/fixtures'
 import { renderApp } from './test/renderApp'
 
 const mailboxCatalog = http.get('*/v1/inbucket/mailboxes', ({ request }) => {
@@ -99,7 +99,9 @@ describe('access flow', () => {
       [
         http.get('*/v1/session', () => HttpResponse.json(session)),
         mailboxCatalog,
-        http.get('*/v1/inbucket/mailbox', () => HttpResponse.json([])),
+        http.get('*/v1/inbucket/messages', () =>
+          HttpResponse.json(messagePage([])),
+        ),
         http.delete(
           '*/v1/session',
           () => new HttpResponse(null, { status: 204 }),
@@ -116,5 +118,51 @@ describe('access flow', () => {
     expect(
       screen.queryByRole('navigation', { name: 'Mailbox views' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('clears mailbox state when sign out finds an expired session', async () => {
+    const user = userEvent.setup()
+    renderApp(
+      [
+        http.get('*/v1/session', () => HttpResponse.json(session)),
+        mailboxCatalog,
+        http.get('*/v1/inbucket/messages', () =>
+          HttpResponse.json(messagePage([messages[0]])),
+        ),
+        http.get('*/v1/inbucket/mailboxes/:mailbox/messages/:id', () =>
+          HttpResponse.json(parsedInvoice),
+        ),
+        http.get(
+          '*/v1/inbucket/mailboxes/:mailbox/messages/:id/attachments',
+          () => HttpResponse.json([]),
+        ),
+        http.patch(
+          '*/v1/inbucket/mailboxes/:mailbox/messages/:id/read',
+          () => new HttpResponse(null, { status: 204 }),
+        ),
+        http.delete('*/v1/session', () =>
+          HttpResponse.json({ error: 'unauthorized' }, { status: 401 }),
+        ),
+        http.post('*/v1/session', () => HttpResponse.json(session)),
+      ],
+      '/?mailbox=orders&message=invoice',
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: 'August invoice' }),
+    ).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(await screen.findByText('You have signed out.')).toBeVisible()
+    expect(window.location.search).toBe('')
+
+    await user.type(screen.getByRole('textbox', { name: 'Username' }), 'admin')
+    await user.type(screen.getByLabelText('Password'), 'correct password')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'Messages' }),
+    ).toBeVisible()
+    expect(screen.queryByLabelText('Message inspector')).not.toBeInTheDocument()
+    expect(window.location.search).toBe('')
   })
 })

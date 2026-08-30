@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_08_29_030000) do
+ActiveRecord::Schema[8.0].define(version: 2026_08_29_050000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -33,6 +33,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_29_030000) do
     t.datetime "unavailable_at"
     t.index ["available", "received_at", "id"], name: "index_inbucket_messages_on_available_and_received"
     t.index ["available", "seen", "received_at", "id"], name: "index_inbucket_messages_on_available_seen_received"
+    t.index ["available", "size", "id"], name: "index_inbucket_messages_on_available_and_size"
     t.index ["mailbox", "available", "received_at", "id"], name: "index_inbucket_messages_on_mailbox_and_received"
     t.index ["mailbox", "available", "size", "id"], name: "index_inbucket_messages_on_mailbox_and_size"
     t.index ["mailbox", "message_id"], name: "index_inbucket_messages_on_identity", unique: true
@@ -50,6 +51,16 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_29_030000) do
     t.index ["name"], name: "index_mailboxes_on_name", unique: true
   end
 
+  create_table "message_tags", force: :cascade do |t|
+    t.bigint "tag_id", null: false
+    t.bigint "inbucket_message_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["inbucket_message_id"], name: "index_message_tags_on_inbucket_message_id"
+    t.index ["tag_id", "inbucket_message_id"], name: "index_message_tags_on_tag_id_and_inbucket_message_id", unique: true
+    t.index ["tag_id"], name: "index_message_tags_on_tag_id"
+  end
+
   create_table "starred_messages", force: :cascade do |t|
     t.bigint "user_id", null: false
     t.datetime "created_at", null: false
@@ -58,6 +69,16 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_29_030000) do
     t.index ["inbucket_message_id"], name: "index_starred_messages_on_inbucket_message_id"
     t.index ["user_id", "inbucket_message_id"], name: "index_starred_messages_on_user_and_message", unique: true
     t.index ["user_id"], name: "index_starred_messages_on_user_id"
+  end
+
+  create_table "tags", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "name", null: false
+    t.string "color", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index "user_id, lower((name)::text)", name: "index_tags_on_user_and_lower_name", unique: true
+    t.index ["user_id"], name: "index_tags_on_user_id"
   end
 
   create_table "user_sessions", force: :cascade do |t|
@@ -81,7 +102,10 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_29_030000) do
   end
 
   add_foreign_key "inbucket_messages", "mailboxes", column: "mailbox", primary_key: "name", on_delete: :cascade
+  add_foreign_key "message_tags", "inbucket_messages", on_delete: :cascade
+  add_foreign_key "message_tags", "tags", on_delete: :cascade
   add_foreign_key "starred_messages", "inbucket_messages", on_delete: :cascade
   add_foreign_key "starred_messages", "users"
+  add_foreign_key "tags", "users"
   add_foreign_key "user_sessions", "users"
 end

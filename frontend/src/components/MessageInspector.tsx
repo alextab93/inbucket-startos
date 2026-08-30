@@ -6,8 +6,10 @@ import type {
   ParsedMessage,
   SelectedMessage,
   StatusValue,
+  Tag,
 } from '../types'
 import { EmailRenderer } from './EmailRenderer'
+import { TagAction, TagBadges } from './MessageTags'
 import { StarButton } from './StarButton'
 import { StatusMessage } from './StatusMessage'
 
@@ -18,8 +20,20 @@ interface MessageInspectorProps {
   onRead: (mailbox: string, id: string) => void
   starred: boolean
   starPending: boolean
+  onClose: () => void
   onStarChange: (mailbox: string, id: string, starred: boolean) => Promise<void>
   onDeleted: () => Promise<void>
+  tags: Tag[]
+  tagPending: boolean
+  onTagChange: (
+    mailbox: string,
+    id: string,
+    tag: Tag,
+    assigned: boolean,
+  ) => Promise<Tag[]>
+  onCreateTag: (name: string, color: string) => Promise<Tag>
+  onUpdateTag: (tag: Tag, name: string, color: string) => Promise<Tag>
+  onDeleteTag: (tag: Tag) => Promise<void>
 }
 
 export const MessageInspector = ({
@@ -29,8 +43,15 @@ export const MessageInspector = ({
   onRead,
   starred,
   starPending,
+  onClose,
   onStarChange,
   onDeleted,
+  tags,
+  tagPending,
+  onTagChange,
+  onCreateTag,
+  onUpdateTag,
+  onDeleteTag,
 }: MessageInspectorProps) => {
   const [message, setMessage] = useState<ParsedMessage | null>(null)
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -43,7 +64,12 @@ export const MessageInspector = ({
   const [sourcePending, setSourcePending] = useState(false)
   const [sourceStatus, setSourceStatus] = useState<StatusValue>({ message: '' })
   const [deletePending, setDeletePending] = useState(false)
+  const backButtonRef = useRef<HTMLButtonElement>(null)
   const sourceController = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    if (selected) backButtonRef.current?.focus()
+  }, [selected?.mailbox, selected?.id])
 
   useEffect(() => {
     sourceController.current?.abort()
@@ -188,58 +214,131 @@ export const MessageInspector = ({
     ? formatValue(message.subject) || '(No subject)'
     : '(No subject)'
 
+  const changeTag = async (tag: Tag, assigned: boolean) => {
+    if (!selected) return
+    const nextTags = await onTagChange(
+      selected.mailbox,
+      selected.id,
+      tag,
+      assigned,
+    )
+    setMessage((current) =>
+      current ? { ...current, tags: nextTags } : current,
+    )
+  }
+
   return (
     <article className="message-panel" aria-label="Message inspector">
+      {selected ? (
+        <div
+          className="message-action-bar"
+          role="toolbar"
+          aria-label="Message actions"
+        >
+          <button
+            ref={backButtonRef}
+            className="message-action-button"
+            type="button"
+            aria-label="Back to message list"
+            title="Back to message list"
+            onClick={onClose}
+          >
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+              <path d="m14 6-6 6 6 6M8 12h11" />
+            </svg>
+          </button>
+          {message ? (
+            <div className="message-action-group">
+              <TagAction
+                tags={tags}
+                assigned={message.tags || []}
+                pending={tagPending}
+                onToggle={changeTag}
+                onCreate={onCreateTag}
+                onUpdate={async (tag, name, color) => {
+                  const updated = await onUpdateTag(tag, name, color)
+                  setMessage((current) =>
+                    current
+                      ? {
+                          ...current,
+                          tags: current.tags?.map((value) =>
+                            value.id === updated.id ? updated : value,
+                          ),
+                        }
+                      : current,
+                  )
+                  return updated
+                }}
+                onDelete={async (tag) => {
+                  await onDeleteTag(tag)
+                  setMessage((current) =>
+                    current
+                      ? {
+                          ...current,
+                          tags: current.tags?.filter(
+                            (value) => value.id !== tag.id,
+                          ),
+                        }
+                      : current,
+                  )
+                }}
+              />
+              <StarButton
+                starred={starred}
+                label={subject}
+                pending={starPending}
+                className="message-inspector-star"
+                onChange={(value) =>
+                  void onStarChange(selected.mailbox, selected.id, value)
+                }
+              />
+              <button
+                className="message-action-button message-delete-action"
+                type="button"
+                aria-label="Delete message"
+                title="Delete message"
+                disabled={deletePending}
+                onClick={deleteMessage}
+              >
+                <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+                  <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+                </svg>
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {!message ? <div className="message-empty">{loadMessage}</div> : null}
       {message && selected ? (
-        <div>
+        <div className="message-inspector-content">
           <header className="message-header">
-            <div className="message-title-actions">
-              <h2 title={subject}>{subject}</h2>
-              <div className="message-actions">
-                <StarButton
-                  starred={starred}
-                  label={subject}
-                  pending={starPending}
-                  className="message-inspector-star"
-                  onChange={(value) =>
-                    void onStarChange(selected.mailbox, selected.id, value)
-                  }
-                />
-                <button
-                  className="button button-danger"
-                  type="button"
-                  disabled={deletePending}
-                  onClick={deleteMessage}
-                >
-                  Delete message
-                </button>
+            <h2 title={subject}>{subject}</h2>
+            <div className="message-header-details">
+              <dl>
+                <div>
+                  <dt>From</dt>
+                  <dd>
+                    {formatValue(message.from) ||
+                      headerValue(message, 'from') ||
+                      'Unknown sender'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>To</dt>
+                  <dd>
+                    {formatValue(message.to) ||
+                      headerValue(message, 'to') ||
+                      'Unknown recipient'}
+                  </dd>
+                </div>
+              </dl>
+              <div className="message-header-aside">
+                <time className="message-header-date">
+                  {dateText(message.date || headerValue(message, 'date'))}
+                </time>
+                <TagBadges tags={message.tags || []} />
               </div>
             </div>
-            <dl>
-              <div>
-                <dt>From</dt>
-                <dd>
-                  {formatValue(message.from) ||
-                    headerValue(message, 'from') ||
-                    'Unknown sender'}
-                </dd>
-              </div>
-              <div>
-                <dt>To</dt>
-                <dd>
-                  {formatValue(message.to) ||
-                    headerValue(message, 'to') ||
-                    'Unknown recipient'}
-                </dd>
-              </div>
-              <div>
-                <dt>Date</dt>
-                <dd>
-                  {dateText(message.date || headerValue(message, 'date'))}
-                </dd>
-              </div>
-            </dl>
           </header>
           <StatusMessage value={messageStatus} />
           <EmailRenderer

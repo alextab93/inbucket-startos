@@ -62,6 +62,20 @@ RSpec.describe InbucketMailboxSync do
     expect(message.starred_messages).to be_empty
   end
 
+  it "removes message tag assignments but preserves reusable tags after a message disappears" do
+    message = indexed_message
+    user = User.create!(username: "admin", password: "password-123")
+    tag = user.tags.create!(name: "Revelo", color: "#1D4ED8")
+    tag.message_tags.create!(inbucket_message: message)
+    stub_mailbox([])
+
+    described_class.new.call(mailbox)
+
+    expect(message.reload.available?).to be(false)
+    expect(tag.reload).to be_persisted
+    expect(tag.message_tags).to be_empty
+  end
+
   it "preserves indexed messages and stars when an upstream scan fails" do
     message = indexed_message
     user = User.create!(username: "admin", password: "password-123")
