@@ -8,6 +8,7 @@ import type {
   StatusValue,
 } from '../types'
 import { EmailRenderer } from './EmailRenderer'
+import { StarButton } from './StarButton'
 import { StatusMessage } from './StatusMessage'
 
 interface MessageInspectorProps {
@@ -15,6 +16,9 @@ interface MessageInspectorProps {
   emptyMessage: string
   onUnauthorized: () => void
   onRead: (mailbox: string, id: string) => void
+  starred: boolean
+  starPending: boolean
+  onStarChange: (mailbox: string, id: string, starred: boolean) => Promise<void>
   onDeleted: () => Promise<void>
 }
 
@@ -23,6 +27,9 @@ export const MessageInspector = ({
   emptyMessage,
   onUnauthorized,
   onRead,
+  starred,
+  starPending,
+  onStarChange,
   onDeleted,
 }: MessageInspectorProps) => {
   const [message, setMessage] = useState<ParsedMessage | null>(null)
@@ -177,6 +184,9 @@ export const MessageInspector = ({
 
   const html = message?.body ? formatValue(message.body.html) : ''
   const text = message?.body ? formatValue(message.body.text) : ''
+  const subject = message
+    ? formatValue(message.subject) || '(No subject)'
+    : '(No subject)'
 
   return (
     <article className="message-panel" aria-label="Message inspector">
@@ -185,15 +195,26 @@ export const MessageInspector = ({
         <div>
           <header className="message-header">
             <div className="message-title-actions">
-              <h2>{formatValue(message.subject) || '(No subject)'}</h2>
-              <button
-                className="button button-danger"
-                type="button"
-                disabled={deletePending}
-                onClick={deleteMessage}
-              >
-                Delete message
-              </button>
+              <h2 title={subject}>{subject}</h2>
+              <div className="message-actions">
+                <StarButton
+                  starred={starred}
+                  label={subject}
+                  pending={starPending}
+                  className="message-inspector-star"
+                  onChange={(value) =>
+                    void onStarChange(selected.mailbox, selected.id, value)
+                  }
+                />
+                <button
+                  className="button button-danger"
+                  type="button"
+                  disabled={deletePending}
+                  onClick={deleteMessage}
+                >
+                  Delete message
+                </button>
+              </div>
             </div>
             <dl>
               <div>

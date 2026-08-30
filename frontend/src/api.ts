@@ -153,6 +153,18 @@ export const api = {
       jsonOptions('PATCH', undefined, signal),
       'empty',
     ),
+  starredMessages: (signal?: AbortSignal) =>
+    request<MessageSummary[]>('/v1/inbucket/starred/messages', { signal }),
+  setStarred: (
+    mailbox: string,
+    id: string | number,
+    starred: boolean,
+    signal?: AbortSignal,
+  ) =>
+    request<{ starred: boolean; message?: MessageSummary }>(
+      messagePath(mailbox, id, '/starred'),
+      jsonOptions('PATCH', { starred }, signal),
+    ),
   messageSource: (mailbox: string, id: string | number, signal?: AbortSignal) =>
     request<string>(messagePath(mailbox, id, '/source'), { signal }, 'text'),
   attachments: (mailbox: string, id: string | number, signal?: AbortSignal) =>

@@ -16,18 +16,36 @@ class InbucketMonitor
 
     def record(payload)
       event = JSON.parse(payload)
-      return unless event["variant"] == "message-stored"
-
-      header = event["header"]
-      return unless header.is_a?(Hash)
-
-      Mailbox.record(header["mailbox"])
-      MonitorMessage.record(header)
+      record_stored(event["header"]) if event["variant"] == "message-stored"
+      record_deleted(event["identifier"]) if event["variant"] == "message-deleted"
     rescue JSON::ParserError
       nil
     end
 
     private
+
+    def record_stored(header)
+      return unless header.is_a?(Hash)
+
+      mailbox = Mailbox.record(header["mailbox"])
+      return unless mailbox
+
+      InbucketMessage.with_mailbox_lock(mailbox.name) do
+        InbucketMessage.record(header, source: :monitor)
+      end
+    end
+
+    def record_deleted(identifier)
+      return unless identifier.is_a?(Hash)
+
+      mailbox = identifier["mailbox"].to_s
+      message_id = identifier["id"].to_s
+      return if mailbox.empty? || message_id.empty? || !Mailbox.exists?(name: mailbox)
+
+      InbucketMessage.with_mailbox_lock(mailbox) do
+        InbucketMessage.mark_unavailable(mailbox, message_id)
+      end
+    end
 
     def connect
       socket = Faye::WebSocket::Client.new(monitor_url)

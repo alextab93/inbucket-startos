@@ -5,12 +5,15 @@ interface ListControlsProps {
   id: string
   search: string
   readFilter: ReadFilter
+  mailbox: string
+  mailboxOptions: string[]
   sort: ListSort
   searchLabel: string
   searchPlaceholder: string
   triggerLabel: string
   onSearchChange: (value: string) => void
   onReadFilterChange: (value: ReadFilter) => void
+  onMailboxChange: (value: string) => void
   onSortChange: (value: ListSort) => void
 }
 
@@ -37,9 +40,7 @@ const SortIcon = ({ value }: { value: ListSort }) => {
       ) : (
         <path d="M4 6h7M4 10h7M4 14h5" />
       )}
-      <path
-        d={ascending ? 'M17 20V4m-4 4 4-4 4 4' : 'M17 4v16m-4-4 4 4 4-4'}
-      />
+      <path d={ascending ? 'M17 20V4m-4 4 4-4 4 4' : 'M17 4v16m-4-4 4 4 4-4'} />
     </svg>
   )
 }
@@ -48,12 +49,15 @@ export const ListControls = ({
   id,
   search,
   readFilter,
+  mailbox,
+  mailboxOptions,
   sort,
   searchLabel,
   searchPlaceholder,
   triggerLabel,
   onSearchChange,
   onReadFilterChange,
+  onMailboxChange,
   onSortChange,
 }: ListControlsProps) => {
   const [open, setOpen] = useState(false)
@@ -99,7 +103,7 @@ export const ListControls = ({
           title={triggerLabel}
           aria-expanded={open}
           aria-controls={panelId}
-          data-active={readFilter !== 'all' || sort !== 'newest'}
+          data-active={readFilter !== 'all' || mailbox || sort !== 'newest'}
           onClick={() => setOpen((value) => !value)}
         >
           <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
@@ -140,6 +144,27 @@ export const ListControls = ({
               <span className="list-filter-option-content">Unread</span>
             </label>
           </fieldset>
+          {mailboxOptions.length ? (
+            <fieldset className="list-filter-section">
+              <legend>Mailbox</legend>
+              <label className="list-filter-select">
+                <span>Show messages from</span>
+                <select
+                  value={mailbox}
+                  onChange={(event) =>
+                    onMailboxChange(event.currentTarget.value)
+                  }
+                >
+                  <option value="">All mailboxes</option>
+                  {mailboxOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </fieldset>
+          ) : null}
           <fieldset className="list-filter-section">
             <legend>Sort by</legend>
             {sorts.map((option) => (

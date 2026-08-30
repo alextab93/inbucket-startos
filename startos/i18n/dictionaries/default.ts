@@ -47,6 +47,9 @@ const dict = {
   Username: 43,
   Password: 44,
   'Set the Inbucket Client password before starting Inbucket.': 45,
+  'Client Reconciler': 46,
+  'The client reconciler is ready': 47,
+  'The client reconciler is not ready': 48,
 } as const
 
 /**

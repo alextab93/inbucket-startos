@@ -7,6 +7,7 @@ import { MailboxTools } from './components/MailboxTools'
 import { MessageWorkspace } from './components/MessageWorkspace'
 import { MonitorView } from './components/MonitorView'
 import { StatusMessage } from './components/StatusMessage'
+import { StarredView } from './components/StarredView'
 import type {
   ArchivedMailbox,
   AuthenticationState,
@@ -26,6 +27,9 @@ const defaultMailboxStatus: StatusValue = {
 const normalizeMailboxNames = (mailboxes: string[]): string[] => [
   ...new Set(mailboxes.map((mailbox) => mailbox.trim()).filter(Boolean)),
 ]
+
+const messageKey = (mailbox: string, id: string): string =>
+  `${mailbox}\u0000${id}`
 
 const replaceLocation = (mailbox = '', message = '') => {
   const url = new URL(window.location.href)
@@ -79,11 +83,21 @@ export const App = () => {
     'Select a message to read it.',
   )
   const [mailboxActionPending, setMailboxActionPending] = useState(false)
+  const [starredMessages, setStarredMessages] = useState<MessageSummary[]>([])
+  const [starredSelectedMessage, setStarredSelectedMessage] =
+    useState<SelectedMessage | null>(null)
+  const [starredLoading, setStarredLoading] = useState(false)
+  const [starredStatus, setStarredStatus] = useState<StatusValue>({
+    message: '',
+  })
+  const [starPendingKeys, setStarPendingKeys] = useState<string[]>([])
   const mainRef = useRef<HTMLElement>(null)
   const mailboxLoadController = useRef<AbortController | null>(null)
+  const starredLoadController = useRef<AbortController | null>(null)
 
   const expireSession = useCallback(() => {
     mailboxLoadController.current?.abort()
+    starredLoadController.current?.abort()
     setSession(null)
     setAuthentication('expired')
     setAccessStatus({
@@ -93,10 +107,42 @@ export const App = () => {
     setView('mailboxes')
     setSelectedMailboxes([])
     setMessages([])
+    setStarredMessages([])
+    setStarredSelectedMessage(null)
+    setStarPendingKeys([])
     setSelectedMessage(null)
     setInspectorEmptyMessage('Select a message to read it.')
     replaceLocation()
   }, [])
+
+  const loadStarred = useCallback(async () => {
+    starredLoadController.current?.abort()
+    const controller = new AbortController()
+    starredLoadController.current = controller
+    setStarredLoading(true)
+    setStarredStatus({ message: 'Loading starred messages.', state: 'loading' })
+    try {
+      const result = await api.starredMessages(controller.signal)
+      if (!Array.isArray(result)) throw new ApiError(422, 'invalid_response')
+      setStarredMessages(result)
+      setStarredStatus({
+        message: `${result.length} starred ${result.length === 1 ? 'message' : 'messages'}.`,
+        state: 'authenticated',
+      })
+    } catch (error) {
+      if (isAbort(error)) return
+      if (isUnauthorized(error)) return expireSession()
+      setStarredStatus({
+        message: 'Starred messages could not be loaded. Please try again.',
+        state: 'error',
+      })
+    } finally {
+      if (starredLoadController.current === controller) {
+        starredLoadController.current = null
+        setStarredLoading(false)
+      }
+    }
+  }, [expireSession])
 
   const refreshCatalogs = useCallback(
     async (signal?: AbortSignal, showLoading = false) => {
@@ -288,6 +334,7 @@ export const App = () => {
     return () => {
       controller.abort()
       mailboxLoadController.current?.abort()
+      starredLoadController.current?.abort()
     }
   }, [loadMailboxes, refreshCatalogs])
 
@@ -298,13 +345,21 @@ export const App = () => {
   }, [authentication, refreshCatalogs])
 
   useEffect(() => {
+    if (authentication === 'authenticated' && view === 'starred') {
+      void loadStarred()
+    }
+  }, [authentication, loadStarred, view])
+
+  useEffect(() => {
     if (authentication !== 'authenticated') return
     const targetId =
       view === 'monitor'
         ? 'monitor-title'
-        : view === 'archive'
-          ? 'archived-mailboxes-title'
-          : 'mailbox-title'
+        : view === 'starred'
+          ? 'starred-title'
+          : view === 'archive'
+            ? 'archived-mailboxes-title'
+            : 'mailbox-title'
     document.getElementById(targetId)?.focus()
   }, [authentication, view])
 
@@ -350,6 +405,9 @@ export const App = () => {
       setView('mailboxes')
       setSelectedMailboxes([])
       setMessages([])
+      setStarredMessages([])
+      setStarredSelectedMessage(null)
+      setStarPendingKeys([])
       setSelectedMessage(null)
       replaceLocation()
     } catch (error) {
@@ -387,13 +445,119 @@ export const App = () => {
           : message,
       ),
     )
+    setStarredMessages((current) =>
+      current.map((message) =>
+        message.mailbox === mailbox && String(message.id) === id
+          ? { ...message, seen: true }
+          : message,
+      ),
+    )
   }, [])
+
+  const changeStarred = useCallback(
+    async (mailbox: string, id: string, starred: boolean) => {
+      const key = messageKey(mailbox, id)
+      if (starPendingKeys.includes(key)) return
+      setStarPendingKeys((current) =>
+        current.includes(key) ? current : [...current, key],
+      )
+      setMessages((current) =>
+        current.map((message) =>
+          message.mailbox === mailbox && String(message.id) === id
+            ? { ...message, starred }
+            : message,
+        ),
+      )
+      try {
+        const result = await api.setStarred(mailbox, id, starred)
+        if (result.starred !== starred || (starred && !result.message)) {
+          throw new ApiError(422, 'invalid_response')
+        }
+        if (starred && result.message) {
+          setStarredMessages((current) => [
+            result.message as MessageSummary,
+            ...current.filter(
+              (message) =>
+                message.mailbox !== mailbox || String(message.id) !== id,
+            ),
+          ])
+        } else {
+          if (view === 'starred')
+            document.getElementById('starred-title')?.focus()
+          setStarredMessages((current) =>
+            current.filter(
+              (message) =>
+                message.mailbox !== mailbox || String(message.id) !== id,
+            ),
+          )
+          setStarredSelectedMessage((current) =>
+            current?.mailbox === mailbox && current.id === id ? null : current,
+          )
+        }
+        setMailboxStatus((current) =>
+          current.message === 'The star could not be updated. Please try again.'
+            ? { message: 'Star updated.', state: 'authenticated' }
+            : current,
+        )
+        if (view === 'starred') {
+          setStarredStatus({
+            message: starred
+              ? 'Message starred.'
+              : 'Message removed from Starred.',
+            state: 'authenticated',
+          })
+        }
+      } catch (error) {
+        setMessages((current) =>
+          current.map((message) =>
+            message.mailbox === mailbox && String(message.id) === id
+              ? { ...message, starred: !starred }
+              : message,
+          ),
+        )
+        if (isUnauthorized(error)) expireSession()
+        else {
+          const status = {
+            message: 'The star could not be updated. Please try again.',
+            state: 'error',
+          } as const
+          if (view === 'starred') setStarredStatus(status)
+          else setMailboxStatus(status)
+        }
+      } finally {
+        setStarPendingKeys((current) =>
+          current.filter((candidate) => candidate !== key),
+        )
+      }
+    },
+    [expireSession, starPendingKeys, view],
+  )
+
+  const starPending = useCallback(
+    (mailbox: string, id: string) =>
+      starPendingKeys.includes(messageKey(mailbox, id)),
+    [starPendingKeys],
+  )
 
   const messageDeleted = async () => {
     setSelectedMessage(null)
     replaceLocation(selectedMailboxes.length === 1 ? selectedMailboxes[0] : '')
     await loadMailboxes(selectedMailboxes)
     setInspectorEmptyMessage('Message deleted.')
+  }
+
+  const starredMessageDeleted = async () => {
+    if (!starredSelectedMessage) return
+    const deleted = starredSelectedMessage
+    setStarredSelectedMessage(null)
+    setStarredMessages((current) =>
+      current.filter(
+        (message) =>
+          message.mailbox !== deleted.mailbox ||
+          String(message.id) !== deleted.id,
+      ),
+    )
+    setStarredStatus({ message: 'Message deleted.', state: 'authenticated' })
   }
 
   const performMailboxAction = async (action: 'archive' | 'delete') => {
@@ -468,6 +632,10 @@ export const App = () => {
     await loadMailboxes(names, String(message.id))
   }
 
+  const selectStarredMessage = (mailbox: string, id: string) => {
+    setStarredSelectedMessage({ mailbox, id })
+  }
+
   const authenticated = authentication === 'authenticated' && Boolean(session)
   const activeMailboxSummary =
     selectedMailboxes.length === 0
@@ -511,6 +679,19 @@ export const App = () => {
               active={view === 'monitor'}
               onUnauthorized={expireSession}
               onOpenMessage={openMonitorMessage}
+            />
+            <StarredView
+              active={view === 'starred'}
+              messages={starredMessages}
+              selected={starredSelectedMessage}
+              loading={starredLoading}
+              status={starredStatus}
+              onSelectMessage={selectStarredMessage}
+              onUnauthorized={expireSession}
+              onRead={markRead}
+              starPending={starPending}
+              onStarChange={changeStarred}
+              onDeleted={starredMessageDeleted}
             />
             <ArchivedView
               active={view === 'archive'}
@@ -556,6 +737,8 @@ export const App = () => {
                 onSelectMessage={selectMessage}
                 onUnauthorized={expireSession}
                 onRead={markRead}
+                starPending={starPending}
+                onStarChange={changeStarred}
                 onDeleted={messageDeleted}
               />
             </div>

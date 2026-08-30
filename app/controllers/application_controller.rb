@@ -16,6 +16,10 @@ class ApplicationController < ActionController::API
     @current_user_session = UserSession.authenticate(raw_token)
   end
 
+  def current_user
+    current_user_session&.user
+  end
+
   def require_session!
     return if current_user_session
 

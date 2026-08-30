@@ -78,7 +78,9 @@ describe('mailbox workspace', () => {
       screen.getByRole('button', { name: 'Filter and sort messages' }),
     )
     await user.click(screen.getByRole('radio', { name: 'Read' }))
-    expect(screen.getByRole('button', { name: /Welcome aboard/ })).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: /^Read: Welcome aboard/ }),
+    ).toBeVisible()
     expect(
       screen.queryByRole('button', { name: /August invoice, / }),
     ).not.toBeInTheDocument()
@@ -130,6 +132,158 @@ describe('mailbox workspace', () => {
     ])
   })
 
+  it('shows starred messages across mailboxes with mailbox, read, and sort controls', async () => {
+    const user = userEvent.setup()
+    let starredMessages = messages.map((message) => ({
+      ...message,
+      starred: true,
+    }))
+    renderApp([
+      http.get('*/v1/session', () => HttpResponse.json(session)),
+      ...catalogHandlers(
+        () => ['orders', 'support'],
+        () => [],
+      ),
+      http.get('*/v1/inbucket/starred/messages', () =>
+        HttpResponse.json(starredMessages),
+      ),
+      http.patch(
+        '*/v1/inbucket/mailboxes/:mailbox/messages/:id/starred',
+        async ({ params, request }) => {
+          const body = (await request.json()) as { starred: boolean }
+          if (!body.starred) {
+            starredMessages = starredMessages.filter(
+              (message) => String(message.id) !== String(params.id),
+            )
+          }
+          return HttpResponse.json({ starred: body.starred })
+        },
+      ),
+    ])
+
+    await screen.findByRole('heading', { name: 'Messages' })
+    await user.click(screen.getByRole('button', { name: 'Starred' }))
+    expect(
+      await screen.findByRole('button', { name: /^Unread: August invoice/ }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: /^Read: Welcome aboard/ }),
+    ).toBeVisible()
+
+    await user.click(
+      screen.getByRole('button', { name: 'Filter and sort messages' }),
+    )
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Show messages from' }),
+      'support',
+    )
+    expect(
+      screen.getByRole('button', { name: /^Read: Welcome aboard/ }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: /^Unread: August invoice/ }),
+    ).not.toBeInTheDocument()
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Show messages from' }),
+      '',
+    )
+    await user.click(screen.getByRole('radio', { name: 'Unread' }))
+    expect(
+      screen.getByRole('button', { name: /^Unread: August invoice/ }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: /^Read: Welcome aboard/ }),
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: 'All messages' }))
+    await user.click(screen.getByRole('radio', { name: 'Oldest first' }))
+    const list = screen.getByRole('region', { name: 'Starred messages' })
+    expect(
+      within(list)
+        .getAllByRole('button', { name: /^(Read|Unread):/ })
+        .map((button) => button.textContent),
+    ).toEqual([
+      expect.stringContaining('Welcome aboard'),
+      expect.stringContaining('August invoice'),
+    ])
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Remove star: Welcome aboard',
+      }),
+    )
+    expect(
+      await screen.findByRole('heading', { name: 'Starred' }),
+    ).toHaveFocus()
+    expect(
+      screen.queryByRole('button', { name: /^Read: Welcome aboard/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('adds a star from a mailbox and restores its visible state after failure', async () => {
+    const user = userEvent.setup()
+    let shouldFail = false
+    renderApp([
+      http.get('*/v1/session', () => HttpResponse.json(session)),
+      ...catalogHandlers(
+        () => ['orders'],
+        () => [],
+      ),
+      http.get('*/v1/inbucket/mailbox', () =>
+        HttpResponse.json([{ ...messages[0], starred: false }]),
+      ),
+      http.patch(
+        '*/v1/inbucket/mailboxes/:mailbox/messages/:id/starred',
+        async ({ request }) => {
+          if (shouldFail) {
+            return HttpResponse.json(
+              { error: 'inbucket_error' },
+              { status: 502 },
+            )
+          }
+          const body = (await request.json()) as { starred: boolean }
+          return HttpResponse.json({
+            starred: body.starred,
+            message: { ...messages[0], starred: true },
+          })
+        },
+      ),
+    ])
+
+    await screen.findByRole('heading', { name: 'Messages' })
+    await user.click(screen.getByText('Manage mailboxes'))
+    await user.click(screen.getByRole('checkbox', { name: 'orders' }))
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Add star: August invoice',
+      }),
+    )
+    expect(
+      await screen.findByRole('button', {
+        name: 'Remove star: August invoice',
+      }),
+    ).toHaveAttribute('aria-pressed', 'true')
+
+    shouldFail = true
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Remove star: August invoice',
+      }),
+    )
+
+    expect(
+      await screen.findByText(
+        'The star could not be updated. Please try again.',
+      ),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', {
+        name: 'Remove star: August invoice',
+      }),
+    ).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('adds and opens an archived mailbox through visible restored state', async () => {
     const user = userEvent.setup()
     let activeMailboxes: string[] = []
@@ -152,7 +306,10 @@ describe('mailbox workspace', () => {
 
     await screen.findByRole('heading', { name: 'Messages' })
     await user.click(screen.getByText('Add mailbox'))
-    await user.type(screen.getByRole('textbox', { name: 'Mailbox name' }), ' old-orders ')
+    await user.type(
+      screen.getByRole('textbox', { name: 'Mailbox name' }),
+      ' old-orders ',
+    )
     await user.click(screen.getByRole('button', { name: 'Add and open' }))
 
     expect(
@@ -388,9 +545,13 @@ describe('mailbox workspace', () => {
     await screen.findByRole('heading', { name: 'Messages' })
     await user.click(screen.getByText('Manage mailboxes'))
     await user.click(screen.getByRole('checkbox', { name: 'orders' }))
-    await screen.findByRole('button', { name: /Old subject/ })
-    await user.click(screen.getByRole('button', { name: /Old subject/ }))
-    await user.click(screen.getByRole('button', { name: /New subject/ }))
+    await screen.findByRole('button', { name: /^Unread: Old subject/ })
+    await user.click(
+      screen.getByRole('button', { name: /^Unread: Old subject/ }),
+    )
+    await user.click(
+      screen.getByRole('button', { name: /^Unread: New subject/ }),
+    )
 
     expect(
       await screen.findByRole('heading', { name: 'New subject' }),

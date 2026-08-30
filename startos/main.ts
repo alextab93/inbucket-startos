@@ -200,6 +200,24 @@ export const main = sdk.setupMain(async ({ effects }) => {
       },
       requires: ['client-account-prepare'],
     })
+    .addDaemon('client-reconciler', {
+      subcontainer: clientSubcontainer,
+      exec: {
+        command: ['bin/rails', 'runner', 'InbucketReconciler.new.run'],
+        env: clientEnv,
+      },
+      ready: {
+        display: i18n('Client Reconciler'),
+        gracePeriod: 120000,
+        fn: probe(
+          clientSubcontainer,
+          ['test', '-f', '/tmp/inbucket-reconciler-ready'],
+          i18n('The client reconciler is ready'),
+          i18n('The client reconciler is not ready'),
+        ),
+      },
+      requires: ['inbucket', 'client-account-prepare'],
+    })
     .addDaemon('client', {
       subcontainer: clientSubcontainer,
       exec: {

@@ -48,6 +48,9 @@ export default {
     43: 'Usuario',
     44: 'Contraseña',
     45: 'Establece la contraseña del cliente de Inbucket antes de iniciar Inbucket.',
+    46: 'Reconciliador del cliente',
+    47: 'El reconciliador del cliente está listo',
+    48: 'El reconciliador del cliente no está listo',
   },
   de_DE: {
     0: 'Administrations-Weboberfläche',
@@ -96,6 +99,9 @@ export default {
     43: 'Benutzername',
     44: 'Passwort',
     45: 'Lege das Passwort des Inbucket-Clients fest, bevor du Inbucket startest.',
+    46: 'Client-Abgleich',
+    47: 'Der Client-Abgleich ist bereit',
+    48: 'Der Client-Abgleich ist nicht bereit',
   },
   pl_PL: {
     0: 'Administracyjny interfejs webowy',
@@ -144,6 +150,9 @@ export default {
     43: 'Nazwa użytkownika',
     44: 'Hasło',
     45: 'Ustaw hasło klienta Inbucket przed uruchomieniem Inbucket.',
+    46: 'Uzgadnianie klienta',
+    47: 'Uzgadnianie klienta jest gotowe',
+    48: 'Uzgadnianie klienta nie jest gotowe',
   },
   fr_FR: {
     0: "Interface web d'administration",
@@ -192,5 +201,8 @@ export default {
     43: "Nom d'utilisateur",
     44: 'Mot de passe',
     45: 'Définissez le mot de passe du client Inbucket avant de démarrer Inbucket.',
+    46: 'Réconciliation du client',
+    47: 'La réconciliation du client est prête',
+    48: "La réconciliation du client n'est pas prête",
   },
 } satisfies Record<string, LangDict>

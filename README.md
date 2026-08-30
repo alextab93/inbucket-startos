@@ -40,14 +40,14 @@ Three images, one of which is this repository's own application.
 | Image      | Source                                                     | Entrypoint                     |
 | ---------- | ---------------------------------------------------------- | ------------------------------ |
 | `main`     | Upstream `inbucket/inbucket`, unmodified, pinned by digest | Upstream's                     |
-| `client`   | Built from this repo's `Dockerfile`                        | `puma`, and two `rails runner` |
+| `client`   | Built from this repo's `Dockerfile`                        | `puma`, and three Rails runners |
 | `postgres` | Upstream `postgres` alpine, pinned by digest               | Upstream's                     |
 
 All three build for `x86_64` and `aarch64`.
 
 The `client` image is not a wrapper around anything upstream — it is a Rails API and a Vite-built browser frontend written for this package, backed by its own PostgreSQL. It exists because upstream Inbucket's webmail deliberately has no authentication: anyone who can reach it can read every mailbox. The client puts a login in front of the same data, which it reads through upstream's REST API and monitor websocket over loopback.
 
-Three subcontainers run: `inbucket` (upstream), `client-postgres`, and `client-app`. The last hosts the Puma web server, the monitor, and two setup oneshots in one subcontainer, so they share a filesystem. Attach with `start-cli package attach inbucket -n client-app`.
+Three subcontainers run: `inbucket` (upstream), `client-postgres`, and `client-app`. The last hosts the Puma web server, the monitor, the reconciler, and two setup oneshots in one subcontainer, so they share a filesystem. Attach with `start-cli package attach inbucket -n client-app`.
 
 ## Authenticated Client Architecture
 
@@ -68,27 +68,40 @@ App
     │   └── MessageWorkspace
     │       ├── ListControls
     │       ├── MessageList
+    │       │   └── StarButton
     │       └── MessageInspector
+    │           ├── StarButton
     │           ├── EmailRenderer
     │           ├── AttachmentList
     │           └── SourceViewer
     ├── MonitorView
     │   └── ListControls
+    ├── StarredView
+    │   ├── ListControls
+    │   └── MessageWorkspace
     ├── ArchivedView
     ├── StatusMessage
     └── Confirmation boundary
 ```
 
-`App` owns authentication, active-view navigation, the saved-mailbox catalog, selected mailboxes, loaded message summaries, selected message identity, and URL restoration. Each list owns its search, read filter, sort, and filter-panel state. `MessageInspector` owns only the selected message response, attachments, source, loading state, and visible errors. Derived counts, sorted and filtered lists, accessible summaries, active-control indicators, and disabled states are calculated during rendering rather than copied into state.
+`App` owns authentication, active-view navigation, the saved-mailbox catalog, selected mailboxes, loaded message summaries, selected message identities, optimistic star updates, and URL restoration. Each list owns its search, read filter, optional mailbox filter, sort, and filter-panel state. `MessageInspector` owns only the selected message response, attachments, source, loading state, and visible errors. Derived counts, sorted and filtered lists, accessible summaries, active-control indicators, and disabled states are calculated during rendering rather than copied into state.
 
 | State category | Values |
 | -------------- | ------ |
-| Server state | Session, active and archived mailbox catalogs, message summaries, selected parsed message, attachments, monitor summaries |
+| Server state | Session, active and archived mailbox catalogs, message summaries with per-user starred state, all starred summaries, selected parsed message, attachments, monitor summaries |
 | URL state | Selected mailbox and selected message identifier in the `mailbox` and `message` query parameters |
-| User-input state | Credentials, active view, selected mailboxes, search text, read filter, sort, open tools, source visibility |
+| User-input state | Credentials, active view, selected mailboxes, search text, read filter, starred-view mailbox filter, sort, open tools, source visibility |
 | Derived render values | Visible and ordered messages, counts, labels, empty explanations, selected styling, enabled actions |
 
 Inbucket's `seen` value remains part of fetched message and monitor data. It is updated in React only after the upstream-backed read request succeeds. There is no second unread collection or client-side read database.
+
+Upstream Inbucket has no starred field or endpoint. The authenticated client stores one bounded `InbucketMessage` metadata row per upstream mailbox and message identifier, then links each user's star to that shared row. It never copies the body, parsed body, raw source, or attachments. Rails enriches mailbox, monitor, and parsed-message responses with per-user starred state. Successful mailbox scans refresh the shared row and remove every user's star when the upstream message is gone. Failed or invalid scans preserve the last known row and its stars.
+
+The shared metadata contract uses `(mailbox, message_id)` as identity and stores sender, recipients, subject, received time, size, upstream `seen`, availability, and separate monitor, mailbox-scan, and direct-fetch observation times. `received_at` followed by the database identifier is the deterministic ordering boundary. The observation times show which sources have observed a row. There is no local `reviewed` or competing unread state.
+
+The websocket monitor records new arrivals and deletion events immediately. Monitor keeps the bounded delivery summary while its metadata tombstone exists, even when the upstream message later becomes unavailable. A separate reconciler scans every saved mailbox once at startup and every 24 hours, retrying after five minutes when any mailbox fails. Inbucket does not expose a mailbox-catalog endpoint, so historical mailboxes unknown to Rails are not complete until the user opens them or a new monitor event names them. A successful complete mailbox response is authoritative for availability. Direct deletion, mailbox purge, monitor deletion, and a later successful scan remove stars. Failed scans never infer deletion. Unavailable metadata tombstones are retained for seven days and then removed during reconciliation.
+
+This index is the scalable boundary for future server-side filtering and pagination. The current mailbox API still returns Inbucket's complete mailbox response and the browser still filters and sorts that loaded response, so this change does not claim that pagination is already implemented.
 
 ### Behavior contract
 
@@ -96,7 +109,8 @@ Inbucket's `seen` value remains part of fetched message and monitor data. It is 
 - Navigation uses ordinary buttons with `aria-current`, not partial tab semantics. Mailboxes, Monitor, and Archived retain their user controls while hidden. Monitor polling runs only while its authenticated view is visible.
 - Add and open loads any trimmed mailbox name and restores matching archived metadata through the mailbox endpoint. Saved mailboxes support individual selection, Select all, Clear, Archive selected, and confirmed permanent deletion. Successful items leave a partial-failure selection while failed items remain available for retry. Monitor arrivals can add catalog metadata but never restore an archived mailbox.
 - Selected mailboxes load together. Each successful response contributes its mailbox identity, failed responses produce a visible partial result, and default ordering is deterministic. Search covers subject, sender, recipient, mailbox, and displayed date. Read and unread filters are mutually exclusive. Sorting supports newest, oldest, largest, and smallest, keeps stable ties, and puts unknown values after known values.
-- Opening a message shows loading, not-found, upstream-error, and parsed-message states. Subject, From, To, Date, sanitized HTML or plaintext, attachments, source, and deletion remain visible user behaviors. Read styling changes only after the read response succeeds. Changing selection prevents stale message, attachment, source, or renderer results from replacing the current message.
+- Starred lists the signed-in user's starred messages across all mailboxes. It has the same search, read, and sorting controls plus an All mailboxes filter. Removing a star keeps the focused row present until persistence succeeds, then moves focus to the Starred heading before removing the row.
+- Opening a message shows loading, not-found, upstream-error, and parsed-message states. Subject, From, To, Date, sanitized HTML or plaintext, attachments, source, star control, and deletion remain visible user behaviors. Star changes update loaded mailbox views optimistically and roll back with a visible error if persistence fails. Read styling changes only after the read response succeeds. Changing selection prevents stale message, attachment, source, or renderer results from replacing the current message.
 - HTML mail is sanitized and rendered through an authenticated isolated iframe. Sender layout styles, safe external links, CID raster images, safe data images, plaintext linkification, remote-image consent, script blocking, form blocking, no-referrer behavior, and parent isolation remain required. Attachments use authenticated download-only endpoints.
 - Monitor has loading, empty, populated, refreshed, unauthorized, and upstream-error outcomes. Its search, read filters, sorting, and mailbox-message navigation use current upstream `seen` data. Archived has dedicated loading, empty, populated, partial-count, catalog-error, restore-pending, and restore-error outcomes. Restore is non-destructive, while mailbox purge remains a separate confirmed action.
 - Add-mailbox, mailbox-management, and filter controls close on outside interaction. Escape closes them and restores focus to the invoking control. The application preserves the skip link, headings, labels, live status regions, visible focus, destructive confirmation, and desktop, tablet, and mobile layouts.
@@ -118,6 +132,8 @@ Every request uses `credentials: include`, a relative same-origin path, and the 
 | Monitor summaries | `GET /v1/inbucket/monitor/messages` | `200` array capped by Rails at 200 | `401` expired, `502` upstream unavailable, other status retryable |
 | Parsed message | `GET /v1/inbucket/mailboxes/:name/messages/:id` | `200` parsed-message JSON | `401` expired, `404` not found, `502` upstream unavailable |
 | Mark read | `PATCH /v1/inbucket/mailboxes/:name/messages/:id/read` | `204` | Any failure leaves the message visibly unread |
+| Starred messages | `GET /v1/inbucket/starred/messages` | `200` current user's stored message-summary array | `401` expired, other status visible load error |
+| Set starred | `PATCH /v1/inbucket/mailboxes/:name/messages/:id/starred` with boolean `starred` JSON | `200` starred-state JSON with the stored summary when adding | `401` expired, `404` missing upstream message, `422` invalid value, other failures visibly roll back |
 | Message source | `GET /v1/inbucket/mailboxes/:name/messages/:id/source` | `200` plain text | `401` expired, `404` not found, `502` upstream unavailable |
 | Attachment catalog | `GET /v1/inbucket/mailboxes/:name/messages/:id/attachments` | `200` attachment array | `401` expired, `404` missing, `422` invalid message source, `502` upstream unavailable |
 | Attachment download | `GET /v1/inbucket/mailboxes/:name/messages/:id/attachments/:index` | Download response with `Content-Disposition: attachment` | `401` expired, `404` missing |
@@ -169,8 +185,8 @@ The watcher writes fresh fingerprinted output into `public/`, which Rails serves
 
 1. Restore a valid session or show the correct signed-out, expired, or unavailable state. Sign in and sign out through visible results with disabled pending controls.
 2. Select one or several saved mailboxes and see one deterministic combined list. Add and open an archived name, archive selected names, confirm a purge, and retain failed names after partial results.
-3. Search every documented field, switch mutually exclusive read filters, apply every sort, preserve stable ties, place unknown values last, and show the matching empty explanation.
-4. Open a message, mark it read only after success, keep it unread after failure, view source, list and download attachments, delete with confirmation, and prevent stale responses after rapid message switching.
+3. Search every documented field, switch mutually exclusive read filters, apply every sort, preserve stable ties, place unknown values last, and show the matching empty explanation. In Starred, also filter across all mailboxes or one mailbox.
+4. Open a message, mark it read only after success, star and unstar it with visible rollback after failure, keep it unread after read failure, view source, list and download attachments, delete with confirmation, and prevent stale responses after rapid message switching.
 5. Render sanitized HTML, plaintext, CID and safe data images, safe external links, blocked unsafe content, and remote images only after consent inside the isolated frame.
 6. Load and refresh Monitor only while visible, preserve its controls across refreshes, and open an arrival in its mailbox. Show Archived loading, empty, partial-count, catalog-error, restore-success, and restore-error results.
 7. Complete the representative workflows with keyboard access, focus return, labels, headings, live announcements, and desktop, tablet, and mobile layouts.
@@ -183,7 +199,7 @@ Two volumes: received mail on one, the client's own state on the other.
 | ----------------- | -------------------------- | -------------------------------------------------------------------- |
 | `main`            | `/config`, `/storage`      | Upstream's config, messages, indexes, and shared `seen` state        |
 | `main`            | not mounted                | `store.json`, at the volume root                                     |
-| `client-postgres` | `/var/lib/postgresql/data` | The client's users, sessions, mailbox catalog, and monitor summaries |
+| `client-postgres` | `/var/lib/postgresql/data` | Users, sessions, mailbox catalog, bounded shared message metadata, and per-user stars |
 
 Only the `config` and `storage` subdirectories of `main` are mounted, so `store.json` sits beside them and is not visible to any container that does not need it. Messages themselves are files under `/storage`, one directory per mailbox — Inbucket's file store, not a database.
 
@@ -260,7 +276,7 @@ Two tasks, both raised from init rather than only at install.
 
 ## Health Checks
 
-Four checks, and the ordering between them is the diagnostic.
+Six checks, and the ordering between them is the diagnostic.
 
 | Check             | Probes                                                       |
 | ----------------- | ------------------------------------------------------------ |
@@ -268,11 +284,14 @@ Four checks, and the ordering between them is the diagnostic.
 | `smtp`            | The SMTP port is listening — requires `inbucket`             |
 | `client-postgres` | `pg_isready` against the client's database                   |
 | `client-monitor`  | The monitor's ready file exists — requires the account setup |
+| `client-reconciler` | The startup reconciliation finished — requires Inbucket and the account setup |
 | `client`          | `GET /up` on the Rails client                                |
 
 `smtp` failing while `inbucket` passes means the listener did not bind — almost always a domain Inbucket rejected at start.
 
 `client-monitor` is the one worth understanding: it tracks a websocket subscription to upstream's `/api/v2/monitor/messages`, and its ready file disappears when that socket closes. A monitor that keeps going not-ready and back means the client is losing its connection to upstream rather than failing itself — the monitor reconnects on its own every few seconds. Its failure costs the "Monitor" tab and new mailboxes appearing on their own; reading mail through the client is unaffected.
+
+`client-reconciler` becomes ready after its first pass over the saved mailbox catalog. It then repeats every 24 hours. An upstream failure leaves the previous metadata and stars intact, marks that mailbox's sync error, and retries after five minutes.
 
 `client` failing while `client-postgres` passes means Puma did not come up, or the schema setup ahead of it failed — the `client-database-prepare` and `client-account-prepare` output in the logs says which.
 
@@ -280,9 +299,9 @@ Four checks, and the ordering between them is the diagnostic.
 
 The strategy is mixed. `main` — every received message and upstream's config — is copied wholesale. `client-postgres` is **dumped and replayed**, not copied: its files are never captured, and restore rebuilds the database by replaying the dump into a fresh cluster.
 
-Nothing is deliberately excluded. A restored instance needs nothing re-entered: the domain and storage settings come back in `store.json`, the client's account and saved mailbox catalog come back in the dump, and the credentials that worked before the backup still work.
+Nothing is deliberately excluded. A restored instance needs nothing re-entered: the domain and storage settings come back in `store.json`, the client's account, saved mailbox catalog, shared metadata index, and per-user stars come back in the dump, and the credentials that worked before the backup still work.
 
-The monitor's summaries of past deliveries are in the database dump. Message headers, including Inbucket's shared `seen` state, are stored with the messages on `main`, so backup and restore preserve the same read indicator across the Rails client and other interfaces using the upstream API.
+The bounded shared metadata index and per-user star links are in the database dump. Message headers, including Inbucket's canonical `seen` state, are stored with the messages on `main`. The startup reconciliation refreshes the Rails index from those headers after restore.
 
 ## Limitations and Differences
 
@@ -290,7 +309,7 @@ The monitor's summaries of past deliveries are in the database dump. Message hea
 2. **The SMTP listener has no TLS**, so mail arrives in the clear. It is a receiver for testing and disposable addresses.
 3. **POP3 is bound to loopback and not exported.** Upstream serves it; here it is unreachable.
 4. **Only one domain is accepted at a time.** Upstream can accept several; the package's action takes one.
-5. **The client renders HTML mail only after sanitizing it** inside an isolated frame. Sender CSS and complex table layouts are preserved. Remote images are blocked by default and load only after explicit approval. `cid:` images are proxied through an authenticated endpoint, only common raster formats are returned, and attachments download instead of displaying inline, including PDF and SVG files. Its desktop workspace gives the message list and selected message independent scrolling, client-side search, read and unread filtering, date and size sorting of loaded mailbox and monitor metadata, unread indicators backed by Inbucket's shared `seen` state, and mailbox creation and management from the compact toolbar.
+5. **The client renders HTML mail only after sanitizing it** inside an isolated frame. Sender CSS and complex table layouts are preserved. Remote images are blocked by default and load only after explicit approval. `cid:` images are proxied through an authenticated endpoint, only common raster formats are returned, and attachments download instead of displaying inline, including PDF and SVG files. Its desktop workspace gives the message list and selected message independent scrolling, client-side search, read and unread filtering, a cross-mailbox Starred view backed by bounded shared PostgreSQL metadata and per-user links, date and size sorting of loaded mailbox and monitor metadata, unread indicators backed by Inbucket's shared `seen` state, and mailbox creation and management from the compact toolbar.
 6. **Reaching Inbucket from the internet needs an external port 25 forward.** StartOS publishes the SMTP interface on 2500 and cannot map 25 for you.
 
 ## Quick Reference for AI Consumers
@@ -352,5 +371,6 @@ health_checks:
   - smtp
   - client-postgres
   - client-monitor
+  - client-reconciler
   - client
 ```

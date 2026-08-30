@@ -1,4 +1,4 @@
-export type ViewName = 'mailboxes' | 'monitor' | 'archive'
+export type ViewName = 'mailboxes' | 'starred' | 'monitor' | 'archive'
 
 export type AuthenticationState =
   | 'checking'
@@ -45,6 +45,7 @@ export interface MessageSummary {
   date?: HeaderValue
   size?: number | string | null
   seen?: boolean | unknown
+  starred?: boolean | unknown
   'posix-millis'?: number | string
   header?: Record<string, HeaderValue>
 }

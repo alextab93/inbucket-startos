@@ -17,6 +17,8 @@ describe('typed authenticated workspace', () => {
           onSelectMessage={vi.fn()}
           onUnauthorized={vi.fn()}
           onRead={vi.fn()}
+          starPending={() => false}
+          onStarChange={async () => {}}
           onDeleted={async () => {}}
         />
       </StrictMode>,

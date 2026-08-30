@@ -10,28 +10,54 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_08_13_030000) do
+ActiveRecord::Schema[8.0].define(version: 2026_08_29_030000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "inbucket_messages", force: :cascade do |t|
+    t.string "mailbox", null: false
+    t.string "message_id", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "received_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.text "sender"
+    t.jsonb "recipients", default: [], null: false
+    t.text "subject"
+    t.bigint "size"
+    t.boolean "seen"
+    t.boolean "available", default: true, null: false
+    t.datetime "monitor_observed_at"
+    t.datetime "scan_observed_at"
+    t.datetime "direct_observed_at"
+    t.datetime "unavailable_at"
+    t.index ["available", "received_at", "id"], name: "index_inbucket_messages_on_available_and_received"
+    t.index ["available", "seen", "received_at", "id"], name: "index_inbucket_messages_on_available_seen_received"
+    t.index ["mailbox", "available", "received_at", "id"], name: "index_inbucket_messages_on_mailbox_and_received"
+    t.index ["mailbox", "available", "size", "id"], name: "index_inbucket_messages_on_mailbox_and_size"
+    t.index ["mailbox", "message_id"], name: "index_inbucket_messages_on_identity", unique: true
+  end
 
   create_table "mailboxes", force: :cascade do |t|
     t.string "name", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.boolean "archived", default: false, null: false
+    t.datetime "sync_started_at"
+    t.datetime "synced_at"
+    t.string "sync_error"
     t.index ["archived"], name: "index_mailboxes_on_archived"
     t.index ["name"], name: "index_mailboxes_on_name", unique: true
   end
 
-  create_table "monitor_messages", force: :cascade do |t|
-    t.string "mailbox", null: false
-    t.string "message_id", null: false
-    t.jsonb "header", default: {}, null: false
-    t.datetime "received_at"
+  create_table "starred_messages", force: :cascade do |t|
+    t.bigint "user_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["mailbox", "message_id"], name: "index_monitor_messages_on_mailbox_and_message_id", unique: true
-    t.index ["received_at"], name: "index_monitor_messages_on_received_at"
+    t.bigint "inbucket_message_id", null: false
+    t.index ["inbucket_message_id"], name: "index_starred_messages_on_inbucket_message_id"
+    t.index ["user_id", "inbucket_message_id"], name: "index_starred_messages_on_user_and_message", unique: true
+    t.index ["user_id"], name: "index_starred_messages_on_user_id"
   end
 
   create_table "user_sessions", force: :cascade do |t|
@@ -54,5 +80,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_08_13_030000) do
     t.index "lower((username)::text)", name: "index_users_on_lower_username", unique: true
   end
 
+  add_foreign_key "inbucket_messages", "mailboxes", column: "mailbox", primary_key: "name", on_delete: :cascade
+  add_foreign_key "starred_messages", "inbucket_messages", on_delete: :cascade
+  add_foreign_key "starred_messages", "users"
   add_foreign_key "user_sessions", "users"
 end

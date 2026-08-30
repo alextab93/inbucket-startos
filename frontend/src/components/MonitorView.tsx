@@ -107,12 +107,15 @@ export const MonitorView = ({
           id="monitor"
           search={search}
           readFilter={readFilter}
+          mailbox=""
+          mailboxOptions={[]}
           sort={sort}
           searchLabel="Search monitored messages"
           searchPlaceholder="Search monitored messages"
           triggerLabel="Filter and sort monitored messages"
           onSearchChange={setSearch}
           onReadFilterChange={setReadFilter}
+          onMailboxChange={() => undefined}
           onSortChange={setSort}
         />
       </div>

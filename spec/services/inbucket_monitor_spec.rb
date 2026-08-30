@@ -5,7 +5,7 @@ RSpec.describe InbucketMonitor do
     described_class.record({ variant: "message-stored", header: { mailbox: "start9-edge" } }.to_json)
 
     expect(Mailbox.find_by(name: "start9-edge")&.name).to eq("start9-edge")
-    expect(MonitorMessage.find_by(mailbox: "start9-edge")&.message_id).to be_nil
+    expect(InbucketMessage.find_by(mailbox: "start9-edge")&.message_id).to be_nil
   end
 
   it "does not save a mailbox from another monitor event" do
@@ -29,9 +29,10 @@ RSpec.describe InbucketMonitor do
     }
     described_class.record(payload.to_json)
 
-    monitor_message = MonitorMessage.find_by(mailbox: "start9-edge", message_id: "20260813T120000-0001")
+    monitor_message = InbucketMessage.find_by(mailbox: "start9-edge", message_id: "20260813T120000-0001")
 
-    expect(monitor_message&.header).to include("subject" => "Alert")
+    expect(monitor_message&.metadata).to include("subject" => "Alert")
+    expect(monitor_message&.available?).to be(true)
   end
 
   it "keeps running when Inbucket repeats a stored-message event" do
@@ -41,5 +42,21 @@ RSpec.describe InbucketMonitor do
     described_class.record(payload)
 
     expect(Mailbox.where(name: "start9-edge").count).to eq(1)
+  end
+
+  it "removes every star when Inbucket reports a deleted message" do
+    user = User.create!(username: "admin", password: "password-123")
+    described_class.record(
+      { variant: "message-stored", header: { mailbox: "start9-edge", id: "message-1" } }.to_json
+    )
+    message = InbucketMessage.find_by!(mailbox: "start9-edge", message_id: "message-1")
+    StarredMessage.create!(user:, inbucket_message: message)
+
+    described_class.record(
+      { variant: "message-deleted", identifier: { mailbox: "start9-edge", id: "message-1" } }.to_json
+    )
+
+    expect(message.reload.available?).to be(false)
+    expect(StarredMessage.find_by(inbucket_message: message)).to be_nil
   end
 end

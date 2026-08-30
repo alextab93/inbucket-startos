@@ -68,9 +68,15 @@ Mail servers deliver to port 25, and StartOS publishes Inbucket's SMTP interface
 
 Sign in, then use **Add mailbox** to open a mailbox name. The mailbox does not have to exist yet. Mailboxes you have opened are saved under **Manage mailboxes**, where you can select several, archive the ones you are done with, or delete them. Use **Search messages** to filter the loaded messages by subject, sender, recipient, mailbox, or displayed date. Open **Filter** to show read or unread messages and sort the loaded list by newest, oldest, largest, or smallest. The message list and selected message use the available browser height and scroll independently on larger screens.
 
-The **Monitor** tab shows deliveries as they arrive across every mailbox, which is the quickest way to catch a message you are waiting on. Its search covers the displayed date, sender, recipient, mailbox, and subject. Its **Filter** control uses the same read state and sorting choices as the mailbox view.
+The **Starred** tab collects messages you starred across every mailbox. It has the same search, read and unread filters, and sorting choices as Mailboxes, plus a mailbox filter that defaults to **All mailboxes**.
+
+The **Monitor** tab shows deliveries as they arrive across every mailbox, which is the quickest way to catch a message you are waiting on. A recent delivery remains listed for the summary retention period if its upstream message is later deleted or temporarily unavailable. Its search covers the displayed date, sender, recipient, mailbox, and subject. Its **Filter** control uses the same read state and sorting choices as the mailbox view.
 
 Unread messages have a blue dot and stronger subject text. Opening a message records it as read in Inbucket, while the blue left border continues to identify the message currently selected. The state is shared with other interfaces using Inbucket's API, retained across browser sessions, and included in backups.
+
+Use the star beside a message or in the selected-message header to add or remove it from **Starred**. Stars belong to the signed-in user, persist across browser sessions, and are included in backups. Deleting a message or purging its mailbox also removes every user's star for that message.
+
+The private client keeps bounded message summaries in its database so Starred and Monitor can share the same message state without storing message bodies or attachments twice. New arrivals and deletions update that index through the live monitor. Saved mailboxes are also checked when the service starts and every 24 hours. If Inbucket is temporarily unavailable, the previous summaries and stars remain until a later successful check. Historical mailboxes that have never been opened in the private client are discovered only when you open them or when a new message arrives.
 
 The **Archived** view reports when its catalog is loading, when mailbox counts are unavailable, and when a restore fails. Restoring only returns a mailbox to the active list. Permanent deletion remains a separate confirmed action under **Manage mailboxes**.
 

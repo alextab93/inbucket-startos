@@ -100,6 +100,7 @@ export const filterMessages = <T extends MessageSummary>(
   messages: readonly T[],
   search: string,
   readFilter: ReadFilter,
+  mailbox = '',
 ): T[] => {
   const query = search.trim().toLocaleLowerCase()
   return messages.filter((message) => {
@@ -107,7 +108,8 @@ export const filterMessages = <T extends MessageSummary>(
     const matchesRead =
       readFilter === 'all' ||
       (message.seen === true) === (readFilter === 'read')
-    return matchesSearch && matchesRead
+    const matchesMailbox = !mailbox || message.mailbox === mailbox
+    return matchesSearch && matchesRead && matchesMailbox
   })
 }
 
@@ -115,9 +117,10 @@ export const emptyListText = (
   noun: string,
   query: string,
   readFilter: ReadFilter,
+  mailbox = '',
 ): string => {
   const searched = Boolean(query.trim())
-  const filtered = readFilter !== 'all'
+  const filtered = readFilter !== 'all' || Boolean(mailbox)
   if (searched && filtered) return `No ${noun} match your search and filters.`
   if (searched) return `No ${noun} match your search.`
   return `No ${noun} match the selected filters.`

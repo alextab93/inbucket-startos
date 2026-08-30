@@ -1,6 +1,8 @@
 class User < ApplicationRecord
   has_secure_password
 
+  has_many :starred_messages, dependent: :destroy
+  has_many :starred_inbucket_messages, through: :starred_messages, source: :inbucket_message
   has_many :user_sessions, dependent: :destroy
 
   normalizes :username, with: ->(username) { username.strip.downcase }

@@ -57,8 +57,72 @@ RSpec.describe "Inbucket flow", type: :request do
     get "/v1/inbucket/mailbox", params: { name: mailbox }
 
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body).to eq(JSON.parse(messages.to_json))
+    expect(response.parsed_body).to eq(JSON.parse(messages.to_json).map { |item| item.merge("starred" => false) })
     expect(response.headers["Cache-Control"]).to eq("private, no-store")
+  end
+
+  it "returns per-user stars with mailbox messages" do
+    user = authenticate
+    StarredMessage.create!(user:, inbucket_message: index_message(messages.first))
+    stub_json("/api/v1/mailbox/#{mailbox}", messages)
+
+    get "/v1/inbucket/mailbox", params: { name: mailbox }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.first).to include("id" => message_id, "starred" => true)
+  end
+
+  it "stars and unstars an existing message idempotently" do
+    user = authenticate
+    stub_json("/api/v1/mailbox/#{mailbox}/#{message_id}", message)
+
+    2.times do
+      patch "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}/starred",
+            params: { starred: true }.to_json,
+            headers: json_headers
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "starred" => true,
+        "message" => include("mailbox" => mailbox, "id" => message_id, "subject" => "Hello")
+      )
+    end
+    stars = user.starred_messages.joins(:inbucket_message)
+                .where(inbucket_messages: { mailbox:, message_id: })
+    expect(stars.count).to eq(1)
+    expect(InbucketMessage.find_by!(mailbox:, message_id:).direct_observed_at).to be_present
+
+    patch "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}/starred",
+          params: { starred: false }.to_json,
+          headers: json_headers
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to eq("starred" => false)
+    expect(star_for(user, mailbox, message_id)).to be_nil
+  end
+
+  it "does not star a message missing from Inbucket" do
+    user = authenticate
+    stub_request(:get, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}/missing")
+      .to_return(status: 404, body: "not found")
+
+    patch "/v1/inbucket/mailboxes/#{mailbox}/messages/missing/starred",
+          params: { starred: true }.to_json,
+          headers: json_headers
+
+    expect(response).to have_http_status(:not_found)
+    expect(response.parsed_body).to eq("error" => "not_found")
+    expect(star_for(user, mailbox, "missing")).to be_nil
+  end
+
+  it "rejects a starred value that is not boolean" do
+    authenticate
+
+    patch "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}/starred",
+          params: { starred: "true" }.to_json,
+          headers: json_headers
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body).to eq("error" => "invalid_request")
   end
 
   it "returns a seen upstream message without a duplicate read field" do
@@ -106,6 +170,20 @@ RSpec.describe "Inbucket flow", type: :request do
     patch "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}/read"
 
     expect(response).to have_http_status(:no_content)
+  end
+
+  it "updates the shared message state after marking a message read" do
+    user = authenticate
+    indexed = index_message(messages.first)
+    StarredMessage.create!(user:, inbucket_message: indexed)
+    stub_request(:patch, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}/#{message_id}")
+      .to_return(status: 200, body: "")
+
+    patch "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}/read"
+
+    expect(response).to have_http_status(:no_content)
+    expect(indexed.reload.seen).to be(true)
+    expect(indexed.metadata.fetch("seen")).to be(true)
   end
 
   it "escapes mailbox and message identifiers when marking a message seen" do
@@ -178,6 +256,51 @@ RSpec.describe "Inbucket flow", type: :request do
     expect(Mailbox.find_by(name: mailbox)).to be_nil
   end
 
+  it "removes every user's stars for messages no longer present upstream" do
+    user = authenticate
+    other_user = User.create!(username: "other", password: "password-123")
+    indexed = index_message(messages.first)
+    starred = StarredMessage.create!(user:, inbucket_message: indexed)
+    other_starred = StarredMessage.create!(user: other_user, inbucket_message: indexed)
+    stub_json("/api/v1/mailbox/#{mailbox}", [])
+
+    get "/v1/inbucket/mailbox", params: { name: mailbox }
+
+    expect(response).to have_http_status(:ok)
+    expect(StarredMessage.find_by(id: starred.id)).to be_nil
+    expect(StarredMessage.find_by(id: other_starred.id)).to be_nil
+    expect(indexed.reload.available?).to be(false)
+  end
+
+  it "returns the signed-in user's starred messages across mailboxes" do
+    user = authenticate
+    StarredMessage.create!(user:, inbucket_message: index_message(messages.first))
+    StarredMessage.create!(
+      user:,
+      inbucket_message: index_message(messages.first.merge(mailbox: "support", id: "second", subject: "Second"))
+    )
+
+    get "/v1/inbucket/starred/messages"
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to contain_exactly(
+      include("mailbox" => mailbox, "id" => message_id, "starred" => true),
+      include("mailbox" => "support", "id" => "second", "subject" => "Second", "starred" => true)
+    )
+  end
+
+  it "does not return stars for unavailable messages" do
+    user = authenticate
+    indexed = index_message(messages.first)
+    StarredMessage.create!(user:, inbucket_message: indexed)
+    indexed.update!(available: false, unavailable_at: Time.current)
+
+    get "/v1/inbucket/starred/messages"
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to be_empty
+  end
+
   it "returns saved mailboxes" do
     authenticate
     Mailbox.record("alerts")
@@ -200,37 +323,46 @@ RSpec.describe "Inbucket flow", type: :request do
     expect(response.parsed_body).to eq([{ "name" => "alerts", "message_count" => 0 }])
   end
 
-  it "returns recent monitor message summaries with current upstream seen state" do
-    authenticate
-    MonitorMessage.record(monitor_header)
-    unread_header = monitor_header.merge("id" => "20260811T120000-0002", "subject" => "Unread alert")
-    MonitorMessage.record(unread_header)
-    stub_json(
-      "/api/v1/mailbox/#{mailbox}",
-      [
-        { id: message_id, seen: true },
-        { id: unread_header.fetch("id"), seen: false }
-      ]
-    )
+  it "returns recent monitor message summaries from shared metadata" do
+    user = authenticate
+    index_message(monitor_header.merge("seen" => true), source: :monitor)
+    unread_header = monitor_header.merge("id" => "second", "seen" => false)
+    unread = index_message(unread_header, source: :monitor)
+    StarredMessage.create!(user:, inbucket_message: unread)
 
     get "/v1/inbucket/monitor/messages"
 
     expect(response).to have_http_status(:ok)
     messages_by_id = response.parsed_body.index_by { |message| message.fetch("id") }
-    expect(messages_by_id.fetch(message_id)).to include(monitor_header.merge("seen" => true))
-    expect(messages_by_id.fetch(unread_header.fetch("id"))).to include(unread_header.merge("seen" => false))
+    expect(messages_by_id.fetch(message_id)).to include("seen" => true, "starred" => false)
+    expect(messages_by_id.fetch("second")).to include("seen" => false, "starred" => true)
   end
 
-  it "does not return false monitor seen indicators when upstream fails" do
+  it "returns cached monitor summaries while upstream is unavailable" do
     authenticate
-    MonitorMessage.record(monitor_header)
+    index_message(monitor_header.merge("seen" => false), source: :monitor)
     stub_request(:get, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}")
-      .to_return(status: 500, body: "failed")
+      .to_timeout
 
     get "/v1/inbucket/monitor/messages"
 
-    expect(response).to have_http_status(:bad_gateway)
-    expect(response.parsed_body).to eq("error" => "inbucket_error")
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to contain_exactly(
+      include("mailbox" => mailbox, "id" => message_id, "seen" => false)
+    )
+  end
+
+  it "keeps a delivered monitor summary when its upstream message becomes unavailable" do
+    authenticate
+    message = index_message(monitor_header.merge("seen" => false), source: :monitor)
+    message.mark_unavailable!
+
+    get "/v1/inbucket/monitor/messages"
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to contain_exactly(
+      include("mailbox" => mailbox, "id" => message_id, "seen" => false)
+    )
   end
 
   it "archives a saved mailbox without purging its messages" do
@@ -255,13 +387,14 @@ RSpec.describe "Inbucket flow", type: :request do
   end
 
   it "returns a parsed message" do
-    authenticate
+    user = authenticate
+    StarredMessage.create!(user:, inbucket_message: index_message(messages.first))
     stub_json("/api/v1/mailbox/#{mailbox}/#{message_id}", message)
 
     get "/v1/inbucket/mailboxes/#{mailbox}/messages/#{message_id}"
 
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body).to eq(JSON.parse(message.to_json))
+    expect(response.parsed_body).to eq(JSON.parse(message.to_json).merge("starred" => true))
   end
 
   it "returns message source as plain text" do
@@ -443,29 +576,33 @@ RSpec.describe "Inbucket flow", type: :request do
   end
 
   it "deletes a message" do
-    authenticate
-    MonitorMessage.record(monitor_header)
+    user = authenticate
+    indexed = index_message(monitor_header, source: :monitor)
+    StarredMessage.create!(user:, inbucket_message: indexed)
     stub_request(:delete, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}/#{message_id}")
       .to_return(status: 200, body: '"OK"', headers: { "Content-Type" => "application/json" })
 
     delete "/v1/inbucket/message", params: { name: mailbox, id: message_id }
 
     expect(response).to have_http_status(:no_content)
-    expect(MonitorMessage.find_by(mailbox:, message_id:)).to be_nil
+    expect(StarredMessage.find_by(inbucket_message: indexed)).to be_nil
+    expect(indexed.reload.available?).to be(false)
   end
 
   it "purges a mailbox and removes it from saved mailboxes" do
-    authenticate
+    user = authenticate
     Mailbox.record(mailbox)
-    MonitorMessage.record(monitor_header)
+    indexed = index_message(monitor_header, source: :monitor)
+    StarredMessage.create!(user:, inbucket_message: indexed)
     stub_request(:delete, "http://inbucket.test:9000/api/v1/mailbox/#{mailbox}")
       .to_return(status: 200, body: '"OK"', headers: { "Content-Type" => "application/json" })
 
     delete "/v1/inbucket/mailbox", params: { name: mailbox }
 
     expect(response).to have_http_status(:no_content)
+    expect(StarredMessage.find_by(inbucket_message: indexed)).to be_nil
     expect(Mailbox.find_by(name: mailbox)).to be_nil
-    expect(MonitorMessage.find_by(mailbox:)).to be_nil
+    expect(InbucketMessage.find_by(id: indexed.id)).to be_nil
   end
 
   it "returns not found when Inbucket cannot find a message" do
@@ -502,6 +639,18 @@ RSpec.describe "Inbucket flow", type: :request do
     {
       "CONTENT_TYPE" => "application/json"
     }
+  end
+
+  def index_message(header, source: :scan)
+    value = header.deep_stringify_keys
+    Mailbox.record(value.fetch("mailbox"))
+    InbucketMessage.record(value, source:)
+  end
+
+  def star_for(user, mailbox, message_id)
+    user.starred_messages
+        .joins(:inbucket_message)
+        .find_by(inbucket_messages: { mailbox:, message_id: })
   end
 
   def stub_json(path, body)
