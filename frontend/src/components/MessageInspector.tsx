@@ -85,6 +85,10 @@ export const MessageInspector = ({
       setLoadMessage(emptyMessage)
       return
     }
+    if (selected.unavailable) {
+      setLoadMessage('The message was not found.')
+      return
+    }
 
     const controller = new AbortController()
     const mailbox = selected.mailbox
@@ -138,7 +142,14 @@ export const MessageInspector = ({
 
     void load()
     return () => controller.abort()
-  }, [selected?.mailbox, selected?.id, emptyMessage, onRead, onUnauthorized])
+  }, [
+    selected?.mailbox,
+    selected?.id,
+    selected?.unavailable,
+    emptyMessage,
+    onRead,
+    onUnauthorized,
+  ])
 
   useEffect(
     () => () => {

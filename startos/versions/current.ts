@@ -5,9 +5,10 @@ export const current = VersionInfo.of({
   releaseNotes: {
     en_US: `**Features**
 
-- Rebuilds the authenticated client with React while retaining mailbox and Monitor workflows, source viewing, attachment downloads, and responsive layouts.
+- Rebuilds the authenticated client with React while retaining mailbox workflows, source viewing, attachment downloads, and responsive layouts.
 - Adds cross-mailbox Starred messages with per-user state backed by a bounded shared message-metadata index.
-- Adds reusable per-user message tags with ten named colors, custom color selection, accessible badges, and tag filters in Mailboxes, Starred, and Monitor.
+- Adds reusable per-user message tags with ten named colors, custom color selection, accessible badges, and tag filters in Mailboxes and Starred.
+- Adds Live Mailboxes updates from the bounded shared index and reduces navigation to Mailboxes, Starred, and Archived while safely canonicalizing legacy Monitor addresses.
 - Adds search, read and unread filters, inclusive date ranges, date and size sorting, focused full-width message reading, and improved archived-mailbox states.
 - Adds cursor-based infinite pagination with stable matching totals and restores views and selected messages from canonical browser addresses.
 - Uses Inbucket's shared read state and synchronizes stored metadata from live arrivals, deletions, mailbox scans, startup reconciliation, and daily reconciliation.
@@ -18,7 +19,7 @@ export const current = VersionInfo.of({
 
 - Removes stale stars for every user after Inbucket confirms that a message or mailbox was deleted.
 - Removes message tag assignments after confirmed deletion while preserving reusable tag definitions.
-- Keeps Monitor polling database-backed and serializes starring with deletion and reconciliation to avoid repeated mailbox scans and stale stars.
+- Keeps Live Mailboxes polling database-backed and serializes starring with deletion and reconciliation to avoid repeated mailbox scans and stale stars.
 - Preserves indexed metadata and stars when Inbucket is unavailable or returns an invalid mailbox response.
 - Ensures browsers load current frontend assets after upgrades and frontend changes trigger a new package build.
 
@@ -28,9 +29,10 @@ export const current = VersionInfo.of({
 `,
     es_ES: `**Funciones**
 
-- Reconstruye el cliente autenticado con React, conservando los flujos de buzones y Monitor, la vista del código fuente, la descarga de adjuntos y los diseños adaptables.
+- Reconstruye el cliente autenticado con React, conservando los flujos de buzones, la vista del código fuente, la descarga de adjuntos y los diseños adaptables.
 - Añade mensajes Destacados entre buzones con estado por usuario, respaldados por un índice compartido y limitado de metadatos de mensajes.
-- Añade etiquetas de mensajes reutilizables por usuario con diez colores con nombre, selección de color personalizada, distintivos accesibles y filtros de etiquetas en Buzones, Destacados y Monitor.
+- Añade etiquetas de mensajes reutilizables por usuario con diez colores con nombre, selección de color personalizada, distintivos accesibles y filtros de etiquetas en Buzones y Destacados.
+- Añade actualizaciones en vivo de Buzones desde el índice compartido y limitado, reduce la navegación a Buzones, Destacados y Archivados, y normaliza de forma segura las direcciones antiguas del Monitor.
 - Añade búsqueda, filtros de leídos y no leídos, rangos de fechas inclusivos, ordenación por fecha y tamaño, lectura de mensajes enfocada a ancho completo y mejores estados para buzones archivados.
 - Añade paginación infinita basada en cursores con totales de coincidencias estables y restaura las vistas y los mensajes seleccionados desde direcciones canónicas del navegador.
 - Usa el estado de lectura compartido de Inbucket y sincroniza los metadatos almacenados desde llegadas y eliminaciones en vivo, escaneos de buzones y reconciliaciones al iniciar y cada día.
@@ -41,7 +43,7 @@ export const current = VersionInfo.of({
 
 - Elimina los destacados obsoletos de todos los usuarios después de que Inbucket confirma que se eliminó un mensaje o buzón.
 - Elimina las asignaciones de etiquetas tras confirmar una eliminación y conserva las definiciones reutilizables.
-- Mantiene el sondeo del Monitor respaldado por la base de datos y serializa los destacados con la eliminación y la reconciliación para evitar escaneos repetidos de buzones y destacados obsoletos.
+- Mantiene el sondeo en vivo de Buzones respaldado por la base de datos y serializa los destacados con la eliminación y la reconciliación para evitar escaneos repetidos de buzones y destacados obsoletos.
 - Conserva los metadatos indexados y los destacados cuando Inbucket no está disponible o devuelve una respuesta de buzón no válida.
 - Garantiza que los navegadores carguen los recursos actuales de la interfaz después de una actualización y que los cambios del frontend provoquen una nueva compilación del paquete.
 
@@ -51,9 +53,10 @@ export const current = VersionInfo.of({
 `,
     de_DE: `**Funktionen**
 
-- Erstellt den authentifizierten Client mit React neu und behält Postfach- und Monitorabläufe, Quelltextansicht, Downloads von Anhängen und responsive Layouts bei.
+- Erstellt den authentifizierten Client mit React neu und behält Postfachabläufe, Quelltextansicht, Downloads von Anhängen und responsive Layouts bei.
 - Ergänzt postfachübergreifende markierte Nachrichten mit benutzerspezifischem Status auf Basis eines begrenzten gemeinsamen Nachrichtenmetadaten-Index.
-- Ergänzt wiederverwendbare benutzerspezifische Nachrichten-Tags mit zehn benannten Farben, eigener Farbauswahl, zugänglichen Kennzeichnungen und Tag-Filtern in Postfächern, Markiert und Monitor.
+- Ergänzt wiederverwendbare benutzerspezifische Nachrichten-Tags mit zehn benannten Farben, eigener Farbauswahl, zugänglichen Kennzeichnungen und Tag-Filtern in Postfächern und Markiert.
+- Ergänzt Live-Aktualisierungen der Postfächer aus dem begrenzten gemeinsamen Index, reduziert die Navigation auf Postfächer, Markiert und Archiviert und normalisiert alte Monitoradressen sicher.
 - Ergänzt Suche, Gelesen- und Ungelesen-Filter, inklusive Datumsbereiche, Sortierung nach Datum und Größe, eine fokussierte Nachrichtenansicht über die volle Breite sowie verbesserte Zustände für archivierte Postfächer.
 - Ergänzt cursorbasierte endlose Seitennavigation mit stabilen Trefferzahlen und stellt Ansichten und ausgewählte Nachrichten aus kanonischen Browseradressen wieder her.
 - Verwendet Inbuckets gemeinsamen Lesestatus und synchronisiert gespeicherte Metadaten aus Live-Eingängen, Löschungen, Postfachscans sowie Abgleichen beim Start und einmal täglich.
@@ -64,7 +67,7 @@ export const current = VersionInfo.of({
 
 - Entfernt veraltete Markierungen aller Benutzer, nachdem Inbucket die Löschung einer Nachricht oder eines Postfachs bestätigt hat.
 - Entfernt Nachrichten-Tag-Zuweisungen nach bestätigter Löschung und bewahrt wiederverwendbare Tag-Definitionen auf.
-- Hält die Monitor-Abfragen datenbankgestützt und serialisiert Markierungen mit Löschung und Abgleich, um wiederholte Postfachscans und veraltete Markierungen zu vermeiden.
+- Hält die Live-Abfragen der Postfächer datenbankgestützt und serialisiert Markierungen mit Löschung und Abgleich, um wiederholte Postfachscans und veraltete Markierungen zu vermeiden.
 - Bewahrt indexierte Metadaten und Markierungen auf, wenn Inbucket nicht verfügbar ist oder eine ungültige Postfachantwort zurückgibt.
 - Stellt sicher, dass Browser nach Upgrades aktuelle Frontend-Dateien laden und Frontend-Änderungen einen neuen Paket-Build auslösen.
 
@@ -74,9 +77,10 @@ export const current = VersionInfo.of({
 `,
     pl_PL: `**Funkcje**
 
-- Migruje uwierzytelnionego klienta do React, zachowując obsługę skrzynek i Monitora, podgląd źródła, pobieranie załączników oraz układy responsywne.
+- Migruje uwierzytelnionego klienta do React, zachowując obsługę skrzynek, podgląd źródła, pobieranie załączników oraz układy responsywne.
 - Dodaje oznaczone gwiazdką wiadomości ze wszystkich skrzynek ze stanem osobnym dla każdego użytkownika, opartym na ograniczonym współdzielonym indeksie metadanych.
-- Dodaje wielokrotnego użytku tagi wiadomości dla każdego użytkownika z dziesięcioma nazwanymi kolorami, własnym wyborem koloru, dostępnymi etykietami i filtrami tagów w Skrzynkach, Oznaczonych gwiazdką i Monitorze.
+- Dodaje wielokrotnego użytku tagi wiadomości dla każdego użytkownika z dziesięcioma nazwanymi kolorami, własnym wyborem koloru, dostępnymi etykietami i filtrami tagów w Skrzynkach i Oznaczonych gwiazdką.
+- Dodaje aktualizacje Skrzynek na żywo ze współdzielonego ograniczonego indeksu, ogranicza nawigację do Skrzynek, Oznaczonych gwiazdką i Zarchiwizowanych oraz bezpiecznie normalizuje stare adresy Monitora.
 - Dodaje wyszukiwanie, filtry przeczytanych i nieprzeczytanych, inkluzywne zakresy dat, sortowanie według daty i rozmiaru, pełnoszeroki widok wybranej wiadomości oraz ulepszone stany zarchiwizowanych skrzynek.
 - Dodaje nieskończone stronicowanie oparte na kursorach ze stabilną liczbą wyników oraz przywraca widoki i wybrane wiadomości z kanonicznych adresów przeglądarki.
 - Korzysta ze współdzielonego stanu przeczytania Inbucket i synchronizuje metadane z nowych wiadomości, usunięć, skanów skrzynek oraz uzgadniania przy starcie i raz dziennie.
@@ -87,7 +91,7 @@ export const current = VersionInfo.of({
 
 - Usuwa nieaktualne gwiazdki wszystkich użytkowników po potwierdzeniu przez Inbucket usunięcia wiadomości lub skrzynki.
 - Usuwa przypisania tagów po potwierdzonym usunięciu wiadomości, zachowując definicje tagów do ponownego użycia.
-- Utrzymuje odpytywanie Monitora w oparciu o bazę danych i serializuje oznaczanie gwiazdką z usuwaniem oraz uzgadnianiem, aby uniknąć powtarzanych skanów skrzynek i nieaktualnych gwiazdek.
+- Utrzymuje odpytywanie Skrzynek na żywo w oparciu o bazę danych i serializuje oznaczanie gwiazdką z usuwaniem oraz uzgadnianiem, aby uniknąć powtarzanych skanów skrzynek i nieaktualnych gwiazdek.
 - Zachowuje zindeksowane metadane i gwiazdki, gdy Inbucket jest niedostępny lub zwraca nieprawidłową odpowiedź skrzynki.
 - Zapewnia, że po aktualizacji przeglądarka ładuje bieżące zasoby interfejsu, a zmiany frontendu wymuszają ponowne zbudowanie pakietu.
 
@@ -97,9 +101,10 @@ export const current = VersionInfo.of({
 `,
     fr_FR: `**Fonctionnalités**
 
-- Reconstruit le client authentifié avec React tout en conservant les parcours des boîtes et du Moniteur, l’affichage de la source, le téléchargement des pièces jointes et les dispositions adaptatives.
+- Reconstruit le client authentifié avec React tout en conservant les parcours des boîtes, l’affichage de la source, le téléchargement des pièces jointes et les dispositions adaptatives.
 - Ajoute les messages favoris de toutes les boîtes avec un état propre à chaque utilisateur, fondé sur un index partagé et limité des métadonnées.
-- Ajoute des étiquettes de messages réutilisables par utilisateur avec dix couleurs nommées, un sélecteur personnalisé, des badges accessibles et des filtres dans Boîtes, Favoris et Moniteur.
+- Ajoute des étiquettes de messages réutilisables par utilisateur avec dix couleurs nommées, un sélecteur personnalisé, des badges accessibles et des filtres dans Boîtes et Favoris.
+- Ajoute les mises à jour en direct des Boîtes depuis l’index partagé et limité, réduit la navigation à Boîtes, Favoris et Archivées et normalise en toute sécurité les anciennes adresses du Moniteur.
 - Ajoute la recherche, les filtres lus et non lus, les plages de dates inclusives, le tri par date et taille, une lecture ciblée des messages en pleine largeur et de meilleurs états pour les boîtes archivées.
 - Ajoute une pagination infinie par curseur avec un total stable des résultats et restaure les vues et les messages sélectionnés depuis les adresses canoniques du navigateur.
 - Utilise l’état de lecture partagé d’Inbucket et synchronise les métadonnées depuis les arrivées et suppressions en direct, les analyses des boîtes et les réconciliations au démarrage et chaque jour.
@@ -110,7 +115,7 @@ export const current = VersionInfo.of({
 
 - Supprime les favoris obsolètes de tous les utilisateurs après confirmation par Inbucket de la suppression d’un message ou d’une boîte.
 - Supprime les associations d’étiquettes après une suppression confirmée tout en conservant les définitions réutilisables.
-- Conserve l'interrogation du Moniteur basée sur la base de données et sérialise l'ajout aux favoris avec la suppression et la réconciliation afin d'éviter les analyses répétées des boîtes et les favoris obsolètes.
+- Conserve l'interrogation en direct des Boîtes basée sur la base de données et sérialise l'ajout aux favoris avec la suppression et la réconciliation afin d'éviter les analyses répétées des boîtes et les favoris obsolètes.
 - Conserve les métadonnées indexées et les favoris lorsqu’Inbucket est indisponible ou renvoie une réponse de boîte non valide.
 - Garantit qu’après une mise à niveau le navigateur charge les ressources actuelles de l’interface et que les modifications du frontend déclenchent une nouvelle construction du paquet.
 

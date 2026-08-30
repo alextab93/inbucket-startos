@@ -1,10 +1,10 @@
 import type {
   ArchivedMailbox,
   Attachment,
+  LiveMessagePage,
   MessageListQuery,
   MessagePage,
   MessageSummary,
-  MonitorSummary,
   ParsedMessage,
   Session,
   Tag,
@@ -174,6 +174,12 @@ export const api = {
     request<MessagePage>(messagesPath(mailboxes, query, cursor, refresh), {
       signal,
     }),
+  liveMessages: (cursor: string | null, signal?: AbortSignal) => {
+    const query = cursor ? `?cursor=${encode(cursor)}` : ''
+    return request<LiveMessagePage>(`/v1/inbucket/live/messages${query}`, {
+      signal,
+    })
+  },
   archiveMailbox: (mailbox: string, signal?: AbortSignal) =>
     request<void>(
       archiveMailboxPath(mailbox),
@@ -192,17 +198,6 @@ export const api = {
       jsonOptions('DELETE', undefined, signal),
       'empty',
     ),
-  monitorMessages: (dateFrom = '', dateTo = '', signal?: AbortSignal) => {
-    const params = new URLSearchParams()
-    const range = dateRangeInstants(dateFrom, dateTo)
-    if (range.receivedAfter) params.set('received_after', range.receivedAfter)
-    if (range.receivedBefore)
-      params.set('received_before', range.receivedBefore)
-    const query = params.size ? `?${params.toString()}` : ''
-    return request<MonitorSummary[]>(`/v1/inbucket/monitor/messages${query}`, {
-      signal,
-    })
-  },
   message: (mailbox: string, id: string | number, signal?: AbortSignal) =>
     request<ParsedMessage>(messagePath(mailbox, id), { signal }),
   markRead: (mailbox: string, id: string | number, signal?: AbortSignal) =>

@@ -16,53 +16,6 @@ export const TAG_PRESETS = [
 
 const canonicalColor = /^#[0-9A-F]{6}$/
 
-const relativeChannelLuminance = (value: number) => {
-  const channel = value / 255
-  return channel <= 0.04045
-    ? channel / 12.92
-    : ((channel + 0.055) / 1.055) ** 2.4
-}
-
-const contrastWithWhite = (channels: number[]) => {
-  const luminance =
-    0.2126 * relativeChannelLuminance(channels[0]) +
-    0.7152 * relativeChannelLuminance(channels[1]) +
-    0.0722 * relativeChannelLuminance(channels[2])
-  return 1.05 / (luminance + 0.05)
-}
-
-const accessibleBadgeColor = (color: string) => {
-  const canonical = canonicalColor.test(color) ? color : '#64748B'
-  const channels = [1, 3, 5].map((index) =>
-    Number.parseInt(canonical.slice(index, index + 2), 16),
-  )
-  if (contrastWithWhite(channels) >= 4.5) return canonical
-
-  let passingScale = 0
-  let failingScale = 1
-  for (let step = 0; step < 12; step += 1) {
-    const scale = (passingScale + failingScale) / 2
-    const scaledChannels = channels.map((channel) =>
-      Math.floor(channel * scale),
-    )
-    if (contrastWithWhite(scaledChannels) >= 4.5) {
-      passingScale = scale
-    } else {
-      failingScale = scale
-    }
-  }
-
-  const hex = channels
-    .map((channel) =>
-      Math.floor(channel * passingScale)
-        .toString(16)
-        .padStart(2, '0'),
-    )
-    .join('')
-    .toUpperCase()
-  return `#${hex}`
-}
-
 export const TagSwatch = ({ tag }: { tag: Pick<Tag, 'name' | 'color'> }) => (
   <svg
     className="tag-swatch"
@@ -98,19 +51,7 @@ export const TagBadges = ({
     <span className="tag-badges" role="list" aria-label="Message tags">
       {visibleTags.map((tag) => (
         <span className="tag-badge" role="listitem" key={tag.id}>
-          <svg
-            className="tag-badge-background"
-            aria-hidden="true"
-            focusable="false"
-            preserveAspectRatio="none"
-            viewBox="0 0 100 24"
-          >
-            <rect
-              width="100"
-              height="24"
-              fill={accessibleBadgeColor(tag.color)}
-            />
-          </svg>
+          <TagSwatch tag={tag} />
           <span>{tag.name}</span>
         </span>
       ))}

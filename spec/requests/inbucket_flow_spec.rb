@@ -536,6 +536,142 @@ RSpec.describe "Inbucket flow", type: :request do
     )
   end
 
+  it "requires a private session for live message changes" do
+    get "/v1/inbucket/live/messages"
+
+    expect(response).to have_http_status(:unauthorized)
+    expect(response.parsed_body).to eq("error" => "unauthorized")
+  end
+
+  it "returns bounded live changes from the shared index with user state" do
+    user = authenticate
+    Mailbox.record("orders")
+
+    get "/v1/inbucket/live/messages"
+
+    expect(response).to have_http_status(:ok)
+    bootstrap = response.parsed_body
+    expect(bootstrap).to include(
+      "changes" => [],
+      "active_mailboxes" => ["orders"],
+      "has_more" => false
+    )
+    expect(bootstrap.fetch("cursor")).to be_present
+
+    order = index_message(
+      monitor_header.merge("mailbox" => "orders", "id" => "shared", "seen" => false),
+      source: :monitor
+    )
+    second = index_message(
+      monitor_header.merge("mailbox" => "support", "id" => "shared", "seen" => true),
+      source: :monitor
+    )
+    tag = user.tags.create!(name: "Live", color: "#1D4ED8")
+    tag.message_tags.create!(inbucket_message: order)
+    StarredMessage.create!(user:, inbucket_message: order)
+    Mailbox.find_by!(name: "support").update!(archived: true)
+    second.mark_unavailable!
+
+    get "/v1/inbucket/live/messages", params: { cursor: bootstrap.fetch("cursor"), limit: 1 }
+
+    expect(response).to have_http_status(:ok)
+    first_page = response.parsed_body
+    expect(first_page.fetch("changes")).to contain_exactly(
+      include(
+        "mailbox" => "orders",
+        "id" => "shared",
+        "available" => true,
+        "created" => true,
+        "archived" => false,
+        "message" => include(
+          "seen" => false,
+          "starred" => true,
+          "tags" => [include("name" => "Live")]
+        )
+      )
+    )
+    expect(first_page.fetch("has_more")).to be(true)
+
+    get "/v1/inbucket/live/messages", params: { cursor: first_page.fetch("cursor"), limit: 1 }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("changes")).to contain_exactly(
+      include(
+        "mailbox" => "support",
+        "id" => "shared",
+        "available" => false,
+        "archived" => true,
+        "message" => include("seen" => true, "starred" => false, "tags" => [])
+      )
+    )
+    expect(response.parsed_body.fetch("has_more")).to be(false)
+  end
+
+  it "does not emit live changes when an unchanged mailbox snapshot is refreshed" do
+    authenticate
+    indexed = index_message(messages.first, source: :scan)
+    indexed.update_columns(created_at: 2.minutes.ago, updated_at: 1.minute.ago)
+
+    get "/v1/inbucket/live/messages"
+
+    expect(response).to have_http_status(:ok)
+    cursor = response.parsed_body.fetch("cursor")
+    stub_json("/api/v1/mailbox/#{mailbox}", messages)
+
+    get "/v1/inbucket/messages", params: { mailboxes: [mailbox], refresh: true }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("messages")).to contain_exactly(
+      include("mailbox" => mailbox, "id" => message_id)
+    )
+
+    get "/v1/inbucket/live/messages", params: { cursor: }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to include("changes" => [], "has_more" => false)
+  end
+
+  it "emits a live change when a mailbox snapshot changes a stored summary" do
+    authenticate
+    indexed = index_message(messages.first, source: :scan)
+    indexed.update_columns(created_at: 2.minutes.ago, updated_at: 1.minute.ago)
+
+    get "/v1/inbucket/live/messages"
+
+    expect(response).to have_http_status(:ok)
+    cursor = response.parsed_body.fetch("cursor")
+    changed_messages = messages.map { |item| item.merge(subject: "Updated subject") }
+    stub_json("/api/v1/mailbox/#{mailbox}", changed_messages)
+
+    get "/v1/inbucket/messages", params: { mailboxes: [mailbox], refresh: true }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("messages")).to contain_exactly(
+      include("mailbox" => mailbox, "id" => message_id, "subject" => "Updated subject")
+    )
+
+    get "/v1/inbucket/live/messages", params: { cursor: }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("changes")).to contain_exactly(
+      include(
+        "mailbox" => mailbox,
+        "id" => message_id,
+        "created" => false,
+        "message" => include("subject" => "Updated subject")
+      )
+    )
+  end
+
+  it "rejects an invalid live message cursor" do
+    authenticate
+
+    get "/v1/inbucket/live/messages", params: { cursor: "not-a-cursor" }
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body).to eq("error" => "invalid_request")
+  end
+
   it "archives a saved mailbox without purging its messages" do
     authenticate
     Mailbox.record(mailbox)

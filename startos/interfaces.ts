@@ -51,7 +51,7 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
     name: i18n('Web Client Interface'),
     id: 'client',
     description: i18n(
-      'Authenticated mailbox reading, monitoring, source viewing, CID images, and attachment downloads',
+      'Authenticated mailbox reading, live updates, source viewing, CID images, and attachment downloads',
     ),
     type: 'ui',
     masked: false,

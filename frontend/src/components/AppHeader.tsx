@@ -11,7 +11,6 @@ interface AppHeaderProps {
 const views: Array<{ value: ViewName; label: string }> = [
   { value: 'mailboxes', label: 'Mailboxes' },
   { value: 'starred', label: 'Starred' },
-  { value: 'monitor', label: 'Monitor' },
   { value: 'archive', label: 'Archived' },
 ]
 

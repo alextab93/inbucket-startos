@@ -80,6 +80,9 @@ describe('message tags', () => {
     const messageHeader = within(inspector).getByRole('banner')
     expect(within(messageHeader).getByText('Revelo')).toBeVisible()
     expect(
+      within(messageHeader).getByRole('img', { name: 'Revelo color' }),
+    ).toBeVisible()
+    expect(
       screen.queryByRole('region', { name: 'Messages' }),
     ).not.toBeInTheDocument()
 
@@ -89,13 +92,18 @@ describe('message tags', () => {
     expect(
       within(popover).getByRole('checkbox', { name: /Revelo/ }),
     ).toBeChecked()
-    await user.click(
-      within(popover).getByRole('checkbox', { name: /Follow up/ }),
-    )
+    const followUpCheckbox = within(popover).getByRole('checkbox', {
+      name: /Follow up/,
+    })
+    followUpCheckbox.focus()
+    await user.keyboard(' ')
 
     await waitFor(() =>
       expect(within(messageHeader).getByText('Follow up')).toBeVisible(),
     )
+    expect(
+      within(messageHeader).getByRole('img', { name: 'Follow up color' }),
+    ).toBeVisible()
     await user.keyboard('{Escape}')
     expect(trigger).toHaveFocus()
     await user.click(trigger)
@@ -112,6 +120,9 @@ describe('message tags', () => {
       name: /^Read: August invoice/,
     })
     expect(within(summary).getByText('Revelo')).toBeVisible()
+    expect(
+      within(summary).getByRole('img', { name: 'Revelo color' }),
+    ).toBeVisible()
     expect(within(summary).getByText('+1')).toBeVisible()
     expect(within(summary).queryByText('Follow up')).not.toBeInTheDocument()
     await user.click(
@@ -182,16 +193,44 @@ describe('message tags', () => {
       within(createForm).getByRole('textbox', { name: 'Tag name' }),
       'Custom',
     )
+    const presets = [
+      ['Blue', '#1D4ED8'],
+      ['Indigo', '#4338CA'],
+      ['Violet', '#6D28D9'],
+      ['Magenta', '#A21CAF'],
+      ['Rose', '#BE123C'],
+      ['Red', '#B91C1C'],
+      ['Orange', '#C2410C'],
+      ['Amber', '#A16207'],
+      ['Green', '#15803D'],
+      ['Teal', '#0F766E'],
+    ]
+    for (const [label, color] of presets) {
+      expect(
+        within(createForm).getByRole('radio', { name: new RegExp(label) }),
+      ).toHaveAttribute('value', color)
+    }
+    const rose = within(createForm).getByRole('radio', { name: /Rose/ })
+    rose.focus()
+    await user.keyboard(' ')
+    expect(rose).toBeChecked()
+    expect(within(createForm).getByText('#BE123C')).toBeVisible()
     const picker = createForm.querySelector('input[type="color"]')!
     fireEvent.change(picker, { target: { value: '#abcdef' } })
     expect(within(createForm).getByText('#ABCDEF')).toBeVisible()
-    expect(within(createForm).getAllByRole('radio')).toHaveLength(10)
     await user.click(
       within(createForm).getByRole('button', { name: 'Create tag' }),
     )
 
     const custom = await screen.findByRole('checkbox', { name: /Custom/ })
     expect(custom).not.toBeChecked()
+    expect(
+      within(custom.closest('label')!)
+        .getByRole('img', {
+          name: 'Custom color',
+        })
+        .querySelector('rect'),
+    ).toHaveAttribute('fill', '#ABCDEF')
     await user.click(custom)
     await waitFor(() => expect(custom).toBeChecked())
     await user.click(screen.getByRole('button', { name: 'Manage tags' }))
@@ -217,23 +256,37 @@ describe('message tags', () => {
     )
   })
 
-  it('keeps the exact visible assignment after a failed request and expires on unauthorized', async () => {
+  it('keeps the exact visible assignment and selection after a failed request and expires on unauthorized', async () => {
     const user = userEvent.setup()
     let status = 502
+    const tagged = { ...messages[0], tags: [revelo] }
+    const untagged = { ...messages[1], tags: [] }
     renderApp(
       [
         ...authenticatedHandlers(
           () => [revelo, followUp],
-          () => [{ ...messages[0], tags: [revelo] }],
+          (tag) => (tag === String(revelo.id) ? [tagged] : [tagged, untagged]),
         ),
         http.patch(
           '*/v1/inbucket/mailboxes/:mailbox/messages/:id/tags/:tagId',
           () => HttpResponse.json({ error: 'failed' }, { status }),
         ),
       ],
-      '/?mailbox=orders&message=invoice',
+      '/?mailbox=orders',
     )
 
+    await screen.findByRole('button', { name: /^Unread: August invoice/ })
+    await user.click(
+      screen.getByRole('button', { name: 'Filter and sort messages' }),
+    )
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Filter by tag' }),
+      String(revelo.id),
+    )
+    expect(await screen.findByText('1 message in orders.')).toBeVisible()
+    await user.click(
+      screen.getByRole('button', { name: /^Unread: August invoice/ }),
+    )
     await screen.findByRole('heading', { name: 'August invoice' })
     await user.click(screen.getByRole('button', { name: 'Tag message' }))
     const followUpBox = screen.getByRole('checkbox', { name: /Follow up/ })
@@ -242,10 +295,37 @@ describe('message tags', () => {
       await screen.findByText('The message tags could not be updated.'),
     ).toBeVisible()
     expect(followUpBox).not.toBeChecked()
-    expect(screen.getAllByText('Revelo').length).toBeGreaterThan(1)
+    const inspector = screen.getByLabelText('Message inspector')
+    const messageHeader = within(inspector).getByRole('banner')
+    const visibleTags = within(messageHeader).getByRole('list', {
+      name: 'Message tags',
+    })
+    expect(within(visibleTags).getAllByRole('listitem')).toHaveLength(1)
+    expect(within(visibleTags).getByText('Revelo')).toBeVisible()
+    expect(within(visibleTags).queryByText('Follow up')).not.toBeInTheDocument()
+    expect(
+      within(inspector).getByRole('heading', { name: 'August invoice' }),
+    ).toBeVisible()
+
+    await user.keyboard('{Escape}')
+    await user.click(
+      screen.getByRole('button', { name: 'Back to message list' }),
+    )
+    expect(
+      screen.getByRole('button', { name: /^Read: August invoice/ }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: /^Read: Welcome aboard/ }),
+    ).not.toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', { name: /^Read: August invoice/ }),
+    )
+    await screen.findByRole('heading', { name: 'August invoice' })
+    await user.click(screen.getByRole('button', { name: 'Tag message' }))
 
     status = 401
-    await user.click(followUpBox)
+    await user.click(screen.getByRole('checkbox', { name: /Follow up/ }))
     expect(
       await screen.findByText(
         'Your session has expired. Sign in again to continue.',
@@ -254,7 +334,7 @@ describe('message tags', () => {
     expect(screen.getByRole('textbox', { name: 'Username' })).toBeVisible()
   })
 
-  it('filters Starred and Monitor by persisted tag assignments', async () => {
+  it('filters Starred by persisted tag assignments', async () => {
     const user = userEvent.setup()
     const tagged = {
       ...messages[0],
@@ -268,9 +348,6 @@ describe('message tags', () => {
         () => [],
       ),
       http.get('*/v1/inbucket/starred/messages', () =>
-        HttpResponse.json([tagged, untagged]),
-      ),
-      http.get('*/v1/inbucket/monitor/messages', () =>
         HttpResponse.json([tagged, untagged]),
       ),
     ])
@@ -288,31 +365,6 @@ describe('message tags', () => {
     ).not.toBeInTheDocument()
     await user.click(
       screen.getByRole('button', { name: 'Filter and sort messages' }),
-    )
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: 'Filter by tag' }),
-      String(revelo.id),
-    )
-    expect(
-      screen.getByRole('button', { name: /^Unread: August invoice/ }),
-    ).toBeVisible()
-    expect(
-      screen.queryByRole('button', { name: /^Read: Welcome aboard/ }),
-    ).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Monitor' }))
-    const monitorSummary = await screen.findByRole('button', {
-      name: /^Unread: August invoice.*tags: Revelo, Follow up$/,
-    })
-    expect(within(monitorSummary).getByText('Revelo')).toBeVisible()
-    expect(within(monitorSummary).getByText('+1')).toBeVisible()
-    expect(
-      within(monitorSummary).queryByText('Follow up'),
-    ).not.toBeInTheDocument()
-    await user.click(
-      screen.getByRole('button', {
-        name: 'Filter and sort monitored messages',
-      }),
     )
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Filter by tag' }),

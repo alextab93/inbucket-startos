@@ -5,9 +5,11 @@ type ToolName = 'add' | 'manage'
 interface MailboxToolsProps {
   mailboxes: string[]
   selectedMailboxes: string[]
+  liveAllMailboxes: boolean
   actionPending: boolean
   onAdd: (mailbox: string) => Promise<void>
   onSelectionChange: (mailboxes: string[]) => void
+  onLiveAllMailboxesChange: (enabled: boolean) => void
   onArchive: () => void
   onDelete: () => void
 }
@@ -15,9 +17,11 @@ interface MailboxToolsProps {
 export const MailboxTools = ({
   mailboxes,
   selectedMailboxes,
+  liveAllMailboxes,
   actionPending,
   onAdd,
   onSelectionChange,
+  onLiveAllMailboxesChange,
   onArchive,
   onDelete,
 }: MailboxToolsProps) => {
@@ -70,6 +74,17 @@ export const MailboxTools = ({
 
   return (
     <>
+      <label className="mailbox-live-toggle">
+        <input
+          type="checkbox"
+          checked={liveAllMailboxes}
+          disabled={actionPending}
+          onChange={(event) =>
+            onLiveAllMailboxesChange(event.currentTarget.checked)
+          }
+        />
+        <span>Live all active mailboxes</span>
+      </label>
       <details
         ref={addRef}
         className="mailbox-tool mailbox-add-tool"

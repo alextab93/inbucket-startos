@@ -8,18 +8,20 @@ export interface AppLocation {
 
 export type HistoryMode = 'push' | 'replace'
 
-const viewNames: ViewName[] = ['mailboxes', 'starred', 'monitor', 'archive']
+const viewNames: ViewName[] = ['mailboxes', 'starred', 'archive']
 
 export const readLocation = (): AppLocation => {
   const url = new URL(window.location.href)
   const requestedView = url.searchParams.get('view')
+  const legacyMonitor = requestedView === 'monitor'
   const view = viewNames.includes(requestedView as ViewName)
     ? (requestedView as ViewName)
     : 'mailboxes'
   const supportsMessage = view === 'mailboxes' || view === 'starred'
-  let mailbox = supportsMessage
-    ? url.searchParams.get('mailbox')?.trim() || ''
-    : ''
+  let mailbox =
+    supportsMessage && !legacyMonitor
+      ? url.searchParams.get('mailbox')?.trim() || ''
+      : ''
   let message = mailbox ? url.searchParams.get('message')?.trim() || '' : ''
   if (view === 'starred' && !message) {
     mailbox = ''

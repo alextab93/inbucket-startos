@@ -10,6 +10,14 @@ export const renderApp = (handlers: RequestHandler[], initialPath = '/') => {
   server.use(
     ...handlers,
     http.get('*/v1/tags', () => HttpResponse.json([])),
+    http.get('*/v1/inbucket/live/messages', ({ request }) =>
+      HttpResponse.json({
+        changes: [],
+        cursor:
+          new URL(request.url).searchParams.get('cursor') || 'test-cursor',
+        has_more: false,
+      }),
+    ),
   )
   return render(
     <StrictMode>

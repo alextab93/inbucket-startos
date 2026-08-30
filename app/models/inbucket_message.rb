@@ -199,6 +199,8 @@ class InbucketMessage < ApplicationRecord
   end
 
   def mark_unavailable!
+    return unless available?
+
     transaction do
       starred_messages.destroy_all
       message_tags.destroy_all

@@ -6,6 +6,7 @@ import { filterMessages, sortMessages } from './formatting'
 import { messagePage, messages, parsedInvoice, session } from './test/fixtures'
 import { renderApp } from './test/renderApp'
 import type {
+  ArchivedMailbox,
   ListSort,
   MessageSummary,
   ParsedMessage,
@@ -555,6 +556,41 @@ describe('mailbox workspace', () => {
     expect(screen.getByText('No archived mailboxes.')).toBeVisible()
   })
 
+  it('deletes an archived mailbox from the archive tab', async () => {
+    const user = userEvent.setup()
+    let archivedMailboxes: ArchivedMailbox[] = [
+      { name: 'old-orders', message_count: 2 },
+    ]
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderApp([
+      http.get('*/v1/session', () => HttpResponse.json(session)),
+      ...catalogHandlers(
+        () => ['orders'],
+        () => archivedMailboxes,
+      ),
+      paginatedMessageHandler((name) =>
+        messages.filter((message) => message.mailbox === name),
+      ),
+      http.delete('*/v1/inbucket/mailbox', ({ request }) => {
+        const name = new URL(request.url).searchParams.get('name') || ''
+        archivedMailboxes = archivedMailboxes.filter(
+          (mailbox) => mailbox.name !== name,
+        )
+        return new HttpResponse(null, { status: 204 })
+      }),
+    ])
+
+    await screen.findByRole('heading', { name: 'Messages' })
+    await user.click(screen.getByRole('button', { name: 'Archived' }))
+    expect(
+      await screen.findByRole('button', { name: 'Delete mailbox' }),
+    ).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Delete mailbox' }))
+    expect(await screen.findByText('Deleted old-orders.')).toBeVisible()
+    expect(screen.getByText('No archived mailboxes.')).toBeVisible()
+  })
+
   it('restores a message URL and supports read, source, attachment, and deletion outcomes', async () => {
     const user = userEvent.setup()
     let mailboxMessages = [messages[0]]
@@ -645,6 +681,55 @@ describe('mailbox workspace', () => {
       screen.queryByRole('button', { name: /August invoice/ }),
     ).not.toBeInTheDocument()
     expect(window.location.search).toBe('?mailbox=orders')
+  })
+
+  it('keeps the upstream read state after a fresh app load', async () => {
+    const user = userEvent.setup()
+    let mailboxMessages = [messages[0]]
+    const handlers = () => [
+      http.get('*/v1/session', () => HttpResponse.json(session)),
+      ...catalogHandlers(
+        () => ['orders'],
+        () => [],
+      ),
+      paginatedMessageHandler(() => mailboxMessages),
+      http.get('*/v1/inbucket/mailboxes/:mailbox/messages/:id', () =>
+        HttpResponse.json({ ...parsedInvoice, seen: mailboxMessages[0].seen }),
+      ),
+      http.get('*/v1/inbucket/mailboxes/:mailbox/messages/:id/attachments', () =>
+        HttpResponse.json([]),
+      ),
+      http.patch('*/v1/inbucket/mailboxes/:mailbox/messages/:id/read', () => {
+        mailboxMessages = mailboxMessages.map((message) => ({
+          ...message,
+          seen: true,
+        }))
+        return new HttpResponse(null, { status: 204 })
+      }),
+    ]
+
+    const firstLoad = renderApp(handlers(), '/?mailbox=orders&message=invoice')
+
+    expect(
+      await screen.findByRole('heading', { name: 'August invoice' }),
+    ).toBeVisible()
+
+    await user.click(
+      screen.getByRole('button', { name: 'Back to message list' }),
+    )
+    expect(
+      await screen.findByRole('button', { name: /^Read: August invoice/ }),
+    ).toBeVisible()
+
+    firstLoad.unmount()
+    renderApp(handlers(), '/?mailbox=orders')
+
+    expect(
+      await screen.findByRole('button', { name: /^Read: August invoice/ }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: /^Unread: August invoice/ }),
+    ).not.toBeInTheDocument()
   })
 
   it('keeps a message visibly unread when the upstream read change fails', async () => {

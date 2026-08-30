@@ -1,4 +1,4 @@
-export type ViewName = 'mailboxes' | 'starred' | 'monitor' | 'archive'
+export type ViewName = 'mailboxes' | 'starred' | 'archive'
 
 export type AuthenticationState =
   | 'checking'
@@ -74,6 +74,22 @@ export interface MessagePage {
   total_count: number
 }
 
+export interface LiveMessageChange {
+  mailbox: string
+  id: string
+  available: boolean
+  created: boolean
+  archived: boolean
+  message: MessageSummary
+}
+
+export interface LiveMessagePage {
+  changes: LiveMessageChange[]
+  active_mailboxes?: string[]
+  cursor: string
+  has_more: boolean
+}
+
 export interface ParsedMessage extends MessageSummary {
   body?: MessageBody
 }
@@ -85,10 +101,6 @@ export interface Attachment {
   size: number
 }
 
-export interface MonitorSummary extends MessageSummary {
-  mailbox: string
-}
-
 export interface StatusValue {
   message: string
   state?: 'authenticated' | 'error' | 'loading' | 'expired' | 'signed-out'
@@ -97,4 +109,5 @@ export interface StatusValue {
 export interface SelectedMessage {
   mailbox: string
   id: string
+  unavailable?: boolean
 }

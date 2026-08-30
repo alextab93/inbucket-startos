@@ -7,6 +7,7 @@ Rails.application.routes.draw do
     get "email-frame" => "email_frames#show"
     get "inbucket/mailboxes" => "inbucket_mailboxes#index"
     get "inbucket/messages" => "inbucket_messages#index"
+    get "inbucket/live/messages" => "inbucket_live_messages#index"
     get "inbucket/monitor/messages" => "inbucket_monitor_messages#index"
     get "inbucket/mailbox" => "inbucket_mailboxes#show"
     delete "inbucket/mailbox" => "inbucket_mailboxes#destroy"

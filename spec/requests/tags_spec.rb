@@ -72,16 +72,80 @@ RSpec.describe "Message tags", type: :request do
     expect(user.tags.pluck(:name)).to eq(["Revelo"])
   end
 
-  it "accepts every named preset color" do
+  it "rejects blank and overlength names without persisting a tag" do
     user = authenticate
 
-    Tag::PRESET_COLORS.each do |name, color|
+    post "/v1/tags", params: { name: "   ", color: "#1D4ED8" }.to_json, headers: json_headers
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body).to eq("error" => "invalid_request")
+
+    post "/v1/tags", params: { name: "x" * 41, color: "#1D4ED8" }.to_json, headers: json_headers
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body).to include("error" => "invalid_tag")
+    expect(response.parsed_body.dig("fields", "name")).to be_present
+
+    expect(user.tags).to be_empty
+  end
+
+  it "accepts every named preset color" do
+    user = authenticate
+    preset_colors = {
+      "Blue" => "#1D4ED8",
+      "Indigo" => "#4338CA",
+      "Violet" => "#6D28D9",
+      "Magenta" => "#A21CAF",
+      "Rose" => "#BE123C",
+      "Red" => "#B91C1C",
+      "Orange" => "#C2410C",
+      "Amber" => "#A16207",
+      "Green" => "#15803D",
+      "Teal" => "#0F766E"
+    }
+
+    preset_colors.each do |name, color|
       post "/v1/tags", params: { name:, color: }.to_json, headers: json_headers
       expect(response).to have_http_status(:created)
       expect(response.parsed_body).to include("name" => name, "color" => color)
     end
 
-    expect(user.tags.ordered.pluck(:name)).to contain_exactly(*Tag::PRESET_COLORS.keys)
+    expect(user.tags.ordered.pluck(:name)).to match_array(preset_colors.keys)
+  end
+
+  it "accepts and persists a canonical custom color" do
+    user = authenticate
+
+    post "/v1/tags", params: { name: "Custom", color: "#ABCDEF" }.to_json, headers: json_headers
+
+    expect(response).to have_http_status(:created)
+    created = response.parsed_body
+    expect(created).to include("name" => "Custom", "color" => "#ABCDEF")
+    expect(user.tags.find(created.fetch("id")).color).to eq("#ABCDEF")
+  end
+
+  it "lists and mutates only the signed-in user's tag definitions" do
+    user = authenticate
+    owned = user.tags.create!(name: "Owned", color: "#0F766E")
+    other = User.create!(username: "other", password: "password-123")
+    private_tag = other.tags.create!(name: "Private", color: "#BE123C")
+
+    get "/v1/tags"
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to eq([owned.rendered.stringify_keys])
+
+    patch "/v1/tags/#{private_tag.id}",
+          params: { name: "Exposed", color: "#B91C1C" }.to_json,
+          headers: json_headers
+
+    expect(response).to have_http_status(:not_found)
+    expect(private_tag.reload.attributes).to include("name" => "Private", "color" => "#BE123C")
+
+    delete "/v1/tags/#{private_tag.id}", headers: json_headers
+
+    expect(response).to have_http_status(:not_found)
+    expect(private_tag.reload).to be_persisted
   end
 
   it "assigns and removes owned tags idempotently after confirming the message exists" do

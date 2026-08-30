@@ -9,6 +9,7 @@ interface ArchivedViewProps {
   loading: boolean
   catalogError: string
   onRestore: (mailbox: string) => Promise<void>
+  onDelete: (mailbox: string) => Promise<void>
   onUnauthorized: () => void
 }
 
@@ -18,30 +19,58 @@ export const ArchivedView = ({
   loading,
   catalogError,
   onRestore,
+  onDelete,
   onUnauthorized,
 }: ArchivedViewProps) => {
-  const [restoring, setRestoring] = useState<string | null>(null)
-  const [restoreStatus, setRestoreStatus] = useState<StatusValue>({
+  const [actingMailbox, setActingMailbox] = useState<string | null>(null)
+  const [actionStatus, setActionStatus] = useState<StatusValue>({
     message: '',
   })
 
   const restore = async (mailbox: string) => {
-    setRestoring(mailbox)
-    setRestoreStatus({ message: `Restoring ${mailbox}.`, state: 'loading' })
+    setActingMailbox(mailbox)
+    setActionStatus({ message: `Restoring ${mailbox}.`, state: 'loading' })
     try {
       await onRestore(mailbox)
-      setRestoreStatus({
+      setActionStatus({
         message: `Restored ${mailbox}.`,
         state: 'authenticated',
       })
     } catch (error) {
       if (isUnauthorized(error)) return onUnauthorized()
-      setRestoreStatus({
+      setActionStatus({
         message: visibleError(error, `The mailbox ${mailbox}`),
         state: 'error',
       })
     } finally {
-      setRestoring(null)
+      setActingMailbox(null)
+    }
+  }
+
+  const remove = async (mailbox: string) => {
+    if (
+      !window.confirm(
+        `Permanently delete mailbox ${mailbox} and all of its messages?`,
+      )
+    ) {
+      return
+    }
+    setActingMailbox(mailbox)
+    setActionStatus({ message: `Deleting ${mailbox}.`, state: 'loading' })
+    try {
+      await onDelete(mailbox)
+      setActionStatus({
+        message: `Deleted ${mailbox}.`,
+        state: 'authenticated',
+      })
+    } catch (error) {
+      if (isUnauthorized(error)) return onUnauthorized()
+      setActionStatus({
+        message: visibleError(error, `The mailbox ${mailbox}`),
+        state: 'error',
+      })
+    } finally {
+      setActingMailbox(null)
     }
   }
 
@@ -57,8 +86,8 @@ export const ArchivedView = ({
       </h2>
       <p>
         Archived mailboxes remain in Inbucket but are hidden from the main
-        mailbox selector. Restore is non-destructive. Delete selected
-        permanently purges messages and requires confirmation.
+        mailbox selector. Restore is non-destructive. Deleting a mailbox
+        permanently purges its messages and requires confirmation.
       </p>
       <StatusMessage
         value={{
@@ -67,7 +96,7 @@ export const ArchivedView = ({
           state: catalogError ? 'error' : loading ? 'loading' : undefined,
         }}
       />
-      <StatusMessage value={restoreStatus} />
+      <StatusMessage value={actionStatus} />
       <div className="archived-mailbox-options">
         {!loading && !catalogError && !mailboxes.length ? (
           <p className="mailbox-options-empty">No archived mailboxes.</p>
@@ -84,14 +113,24 @@ export const ArchivedView = ({
                     }.`}
               </p>
             </div>
-            <button
-              className="button button-secondary"
-              type="button"
-              disabled={restoring === mailbox.name}
-              onClick={() => void restore(mailbox.name)}
-            >
-              Restore
-            </button>
+            <div className="archived-mailbox-actions">
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={actingMailbox === mailbox.name}
+                onClick={() => void restore(mailbox.name)}
+              >
+                Restore
+              </button>
+              <button
+                className="button button-danger"
+                type="button"
+                disabled={actingMailbox === mailbox.name}
+                onClick={() => void remove(mailbox.name)}
+              >
+                Delete mailbox
+              </button>
+            </div>
           </div>
         ))}
       </div>

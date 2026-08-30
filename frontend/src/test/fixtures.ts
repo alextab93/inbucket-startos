@@ -2,7 +2,6 @@ import type {
   ArchivedMailbox,
   MessagePage,
   MessageSummary,
-  MonitorSummary,
   ParsedMessage,
   Session,
 } from '../types'
@@ -60,11 +59,4 @@ export const parsedInvoice: ParsedMessage = {
 export const archived: ArchivedMailbox[] = [
   { name: 'old-orders', message_count: 2 },
   { name: 'unknown-count', message_count: null },
-]
-
-export const monitored: MonitorSummary[] = [
-  {
-    ...messages[0],
-    mailbox: 'orders',
-  },
 ]
