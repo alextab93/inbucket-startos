@@ -34,17 +34,18 @@ const inputSpec = InputSpec.of({
       '6h': i18n('6 hours'),
       '24h': i18n('24 hours'),
       '168h': i18n('7 days'),
+      '0': i18n('Forever'),
     },
   }),
   mailboxMessageCap: Value.number({
     name: i18n('Messages per Mailbox'),
     description: i18n(
-      'Older messages are deleted when this limit is exceeded.',
+      'Older messages are deleted when this limit is exceeded. Enter 0 for unlimited.',
     ),
     required: true,
     default: 300,
     integer: true,
-    min: 1,
+    min: 0,
     max: 10000,
   }),
   maxMessageSizeMb: Value.number({
@@ -68,7 +69,7 @@ export const configureDomain = sdk.Action.withInput(
       'Choose the recipient domain, message retention period, per-mailbox message limit, and maximum SMTP message size.',
     ),
     warning: i18n(
-      'Messages addressed to any other domain will be rejected. Changing the domain does not rename existing mailboxes. Reducing retention or a storage limit can delete or reject messages.',
+      'Messages addressed to any other domain will be rejected. Changing the domain does not rename existing mailboxes. Reducing retention or the mailbox limit can delete messages. Unlimited storage can fill the data volume.',
     ),
     allowedStatuses: 'any',
     group: null,

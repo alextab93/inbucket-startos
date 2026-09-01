@@ -6,8 +6,8 @@ export const domainRegex =
 
 export const storeShape = z.looseObject({
   domain: z.string().regex(domainRegex).catch(''),
-  retentionPeriod: z.enum(['15m', '1h', '6h', '24h', '168h']).catch('1h'),
-  mailboxMessageCap: z.number().int().min(1).max(10000).catch(300),
+  retentionPeriod: z.enum(['15m', '1h', '6h', '24h', '168h', '0']).catch('1h'),
+  mailboxMessageCap: z.number().int().min(0).max(10000).catch(300),
   maxMessageSizeMb: z.number().int().min(1).max(100).catch(50),
   databasePassword: z.string().min(32).catch(''),
   secretKeyBase: z.string().min(64).catch(''),

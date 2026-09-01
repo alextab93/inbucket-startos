@@ -1,6 +1,6 @@
 export type InbucketEnvironmentConfig = {
   domain: string
-  retentionPeriod: '15m' | '1h' | '6h' | '24h' | '168h'
+  retentionPeriod: '15m' | '1h' | '6h' | '24h' | '168h' | '0'
   mailboxMessageCap: number
   maxMessageSizeMb: number
 }

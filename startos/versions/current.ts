@@ -4,15 +4,15 @@ export const current = VersionInfo.of({
   version: '3.1.1:6',
   releaseNotes: {
     en_US:
-      'Adds a configurable maximum SMTP message size from 1 to 100 MiB, with a 50 MiB default for existing installations.',
+      'Adds a configurable SMTP message size limit from 1 to 100 MiB, plus options to retain messages forever and remove the per-mailbox message cap.',
     es_ES:
-      'Añade un tamaño máximo configurable para los mensajes SMTP de 1 a 100 MiB, con un valor predeterminado de 50 MiB para las instalaciones existentes.',
+      'Añade un límite configurable de 1 a 100 MiB para el tamaño de los mensajes SMTP y opciones para conservar los mensajes para siempre y eliminar el límite de mensajes por buzón.',
     de_DE:
-      'Fügt eine konfigurierbare maximale SMTP-Nachrichtengröße von 1 bis 100 MiB hinzu, mit einem Standardwert von 50 MiB für bestehende Installationen.',
+      'Fügt ein konfigurierbares SMTP-Nachrichtengrößenlimit von 1 bis 100 MiB sowie Optionen zur unbegrenzten Aufbewahrung und zum Aufheben des Nachrichtenlimits pro Postfach hinzu.',
     pl_PL:
-      'Dodaje konfigurowalny maksymalny rozmiar wiadomości SMTP od 1 do 100 MiB, z wartością domyślną 50 MiB dla istniejących instalacji.',
+      'Dodaje konfigurowalny limit rozmiaru wiadomości SMTP od 1 do 100 MiB oraz opcje bezterminowego przechowywania i usunięcia limitu wiadomości na skrzynkę.',
     fr_FR:
-      'Ajoute une taille maximale configurable de 1 à 100 Mio pour les messages SMTP, avec une valeur par défaut de 50 Mio pour les installations existantes.',
+      'Ajoute une limite configurable de 1 à 100 Mio pour les messages SMTP, ainsi que des options de conservation illimitée et de suppression de la limite de messages par boîte.',
   },
   migrations: {
     up: async () => {},

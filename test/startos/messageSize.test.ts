@@ -57,3 +57,31 @@ describe('maximum SMTP message size', () => {
     assert.equal(customEnv.INBUCKET_SMTP_MAXMESSAGEBYTES, '26214400')
   })
 })
+
+describe('message storage limits', () => {
+  it('preserves disabled retention and an unlimited mailbox cap', () => {
+    const config = storeShape.parse({
+      ...validStore,
+      retentionPeriod: '0',
+      mailboxMessageCap: 0,
+    })
+
+    assert.equal(config.retentionPeriod, '0')
+    assert.equal(config.mailboxMessageCap, 0)
+  })
+
+  it('provides disabled storage limits to Inbucket', () => {
+    const env = inbucketEnvironment(
+      {
+        ...validStore,
+        retentionPeriod: '0',
+        mailboxMessageCap: 0,
+        maxMessageSizeMb: 50,
+      },
+      { smtp: 2500, web: 9000, pop3: 1100 },
+    )
+
+    assert.equal(env.INBUCKET_STORAGE_RETENTIONPERIOD, '0')
+    assert.equal(env.INBUCKET_STORAGE_MAILBOXMSGCAP, '0')
+  })
+})

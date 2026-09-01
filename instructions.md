@@ -72,7 +72,7 @@ Opening a message shows the sanitized HTML body, or the plain text if there is n
 
 ### Actions
 
-- **Configure Inbucket:** Changes the accepted domain (see **Choosing a domain**), how long messages are kept, how many each mailbox holds, and the maximum accepted SMTP message size. The message-size limit accepts 1 to 100 MiB and defaults to 50 MiB. The form shows your current settings, and saving restarts Inbucket. Mailboxes collected under a previous domain keep their names and stay readable, new mail for that domain is rejected, lowering a storage limit deletes stored messages that no longer fit, and lowering the message-size limit rejects future messages above it.
+- **Configure Inbucket:** Changes the accepted domain (see **Choosing a domain**), how long messages are kept, how many each mailbox holds, and the maximum accepted SMTP message size. Choose **Forever** to disable automatic expiration, or enter `0` messages per mailbox for no per-mailbox limit. Either unlimited setting can fill the data volume. The message-size limit remains finite, accepts 1 to 100 MiB, and defaults to 50 MiB. The form shows your current settings, and saving restarts Inbucket. Mailboxes collected under a previous domain keep their names and stay readable, new mail for that domain is rejected, lowering a storage limit deletes stored messages that no longer fit, and lowering the message-size limit rejects future messages above it.
 - **Set Admin Password** — generates a new password for the Web Client Interface and shows it once. Run it again whenever you want a fresh password or have lost the one you had. Saving restarts Inbucket, and once it is back the old password no longer works and everyone signed in has been signed out.
 
 ## Limitations
