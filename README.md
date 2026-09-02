@@ -40,12 +40,12 @@ Three images, one of which is this repository's own application.
 | Image      | Source                                                     | Entrypoint                     |
 | ---------- | ---------------------------------------------------------- | ------------------------------ |
 | `main`     | Upstream `inbucket/inbucket`, unmodified, pinned by digest | Upstream's                     |
-| `client`   | Built from this repo's `Dockerfile`                        | `puma`, and three Rails runners |
+| `client`   | Built from `client/`, this repository's own application     | `puma`, and three Rails runners |
 | `postgres` | Upstream `postgres` alpine, pinned by digest               | Upstream's                     |
 
 All three build for `x86_64` and `aarch64`.
 
-The `client` image is not a wrapper around anything upstream — it is a Rails API and a Vite-built browser frontend written for this package, backed by its own PostgreSQL. It exists because upstream Inbucket's webmail deliberately has no authentication: anyone who can reach it can read every mailbox. The client puts a login in front of the same data, which it reads through upstream's REST API and monitor websocket over loopback.
+The `client` image is not a wrapper around anything upstream — it is a Rails API and a Vite-built browser frontend written for this package, backed by its own PostgreSQL. Its whole source is `client/`, which Docker builds as its own context; the repository root holds only the StartOS package. It exists because upstream Inbucket's webmail deliberately has no authentication: anyone who can reach it can read every mailbox. The client puts a login in front of the same data, which it reads through upstream's REST API and monitor websocket over loopback.
 
 Three subcontainers run: `inbucket` (upstream), `client-postgres`, and `client-app`. The last hosts the Puma web server, the monitor, the reconciler, and two setup oneshots in one subcontainer, so they share a filesystem. Attach with `start-cli package attach inbucket -n client-app`.
 
@@ -166,15 +166,15 @@ Rails normalizes parameter errors to `422` JSON, missing records to `404` JSON, 
 
 ### Delivery and security contract
 
-`frontend/index.html` is the authored shell. Vite clears `public/`, creates `public/index.html`, and emits content-fingerprinted JavaScript, CSS, images, and split chunks under `public/assets`. The Docker Node stage builds those files once, and the final Ruby image copies only `/build/public` into `/app/public`. Puma and Rails static middleware serve `/`, generated assets, `/up`, and `/v1/*` from one origin. StartOS exports that Puma origin as the HTTPS Web Client Interface at `/`.
+`client/frontend/index.html` is the authored shell. Vite clears `client/public/`, creates its `index.html`, and emits content-fingerprinted JavaScript, CSS, images, and split chunks under `assets/`. The Docker Node stage builds those files once, and the final Ruby image copies only `/build/public` into `/app/public`. Puma and Rails static middleware serve `/`, generated assets, `/up`, and `/v1/*` from one origin. StartOS exports that Puma origin as the HTTPS Web Client Interface at `/`.
 
-The shell links a root-scoped web app manifest and dedicated PNG icons from `frontend/public`. The manifest launches the HTTPS Web Client Interface in standalone display mode, while the Apple touch icon and compatibility metadata provide the same branded Home Screen behavior on iPhone and iPad. The installed app uses the same HttpOnly cookie session and same-origin network APIs. It has no service worker or offline message cache, so Inbucket must remain reachable.
+The shell links a root-scoped web app manifest and dedicated PNG icons from `client/frontend/public`. The manifest launches the HTTPS Web Client Interface in standalone display mode, while the Apple touch icon and compatibility metadata provide the same branded Home Screen behavior on iPhone and iPad. The installed app uses the same HttpOnly cookie session and same-origin network APIs. It has no service worker or offline message cache, so Inbucket must remain reachable.
 
 Rails sends `Cache-Control: no-cache` for `/`, `/index.html`, `/manifest.webmanifest`, and the stable Home Screen icon paths, so they revalidate after a package upgrade. Files under `/assets/` receive `Cache-Control: public, max-age=31536000, immutable` because Vite gives every production asset a content fingerprint. Private `/v1/*` responses use `private, no-store`.
 
 The document CSP remains `default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; form-action 'self'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'`. Application scripts and styles are external same-origin assets. The email frame has its own response CSP with `default-src 'none'`, no scripts, objects, frames, forms, or base URI, inline sender styles allowed only inside the isolated frame, and remote image origins allowed only after explicit consent. It also sends `Referrer-Policy: no-referrer` and `X-Content-Type-Options: nosniff`.
 
-The Makefile treats the Dockerfile, lockfiles, Gemfiles, Vite configuration, Rails source, database files, support library, and complete `frontend/` tree as client build inputs. A change to any of them invalidates the architecture-specific `.s9pk` target even when `start-cli s9pk list-ingredients` does not enumerate the full Docker context. Release candidates still use `make clean x86` and `make clean arm` so validation never depends on a cached client image or stale `public/` output.
+The Makefile treats every file under `client/` as a client build input. A change to any of them invalidates the architecture-specific `.s9pk` target even when `start-cli s9pk list-ingredients` does not enumerate the full Docker context. Release candidates still use `make clean x86` and `make clean arm` so validation never depends on a cached client image or stale `public/` output.
 
 ## Volume and Data Layout
 
@@ -303,7 +303,7 @@ The bounded shared metadata index, per-user star links, tag definitions, and tag
 package_id: inbucket
 images:
   main: inbucket/inbucket
-  client: built from Dockerfile
+  client: built from client/
   postgres: postgres
 architectures: [x86_64, aarch64]
 subcontainers: [inbucket, client-app, client-postgres]

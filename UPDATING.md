@@ -26,4 +26,4 @@ This package pairs the official `inbucket/inbucket` image with a Rails client bu
 
 ## Changing the Rails client
 
-The client is versioned by the package, not by upstream. Bump the packaging revision after `:` in `startos/versions/current.ts` and rebuild; there is no separate release to track. `bundle exec rspec` covers its request and service specs and needs a real PostgreSQL test database.
+The client lives in `client/` and is versioned by the package, not by upstream. Bump the packaging revision after `:` in `startos/versions/current.ts` and rebuild; there is no separate release to track. `bundle exec rspec`, run inside `client/`, covers its request and service specs and needs a real PostgreSQL test database.
