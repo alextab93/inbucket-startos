@@ -7,7 +7,7 @@ RUN npm ci
 
 COPY frontend ./frontend
 COPY vite.config.mjs ./
-RUN npm run build:frontend
+RUN npm run build
 
 FROM ruby:3.4.5-alpine AS gems
 

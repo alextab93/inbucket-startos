@@ -31,7 +31,8 @@ verified, tried, and decided belongs in the commit message and the PR body.
 
 ## This repo
 
-- **The `client` image is this package's own Rails application, not upstream Inbucket.** `app/`, `config/`, `db/`, `frontend/` and `Dockerfile` are its source; upstream ships as a pinned prebuilt image. `bundle exec rspec` needs a real PostgreSQL test database.
+- **`client/` is this package's own Rails and React application, not upstream Inbucket.** Everything upstream ships as a prebuilt image pinned by digest in the manifest, so nothing under `client/` has an upstream to merge from — it is all ours to review and fix. The repository root is the StartOS package: `startos/`, the manifest, the docs and their own `package.json`.
+- **The two halves install separately.** `npm ci` at the root gets the SDK and drives `check`, `test` and `build` for `startos/`; `npm ci` inside `client/` gets React and Vite and drives the same three for the application. `npm test` in `client/` runs the frontend suite; `bundle exec rspec` there runs the Rails suite and needs a real PostgreSQL test database. The `client` image is built by Docker from `client/` as its own context, so a packaging build never needs `client/node_modules`.
 - **The three client processes share one SubContainer**, which is what lets the monitor's `/tmp` ready file be visible to its health check. Splitting them apart breaks that check.
 - **`INBUCKET_BASE_URL` is the only place the client's coupling to upstream is expressed** — it names the REST API the controllers call and the websocket the monitor subscribes to.
 - **`client-account-prepare` is what applies a rotated password.** `AdminAccount.sync!` runs on every start and revokes live sessions when the password changed, so the action only has to write the store — the reactive read in `main` does the rest.

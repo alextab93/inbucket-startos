@@ -20,7 +20,9 @@ export const manifest = setupManifest({
       arch: ['x86_64', 'aarch64'],
     },
     client: {
-      source: { dockerBuild: {} },
+      source: {
+        dockerBuild: { workdir: 'client', dockerfile: 'client/Dockerfile' },
+      },
       arch: ['x86_64', 'aarch64'],
     },
     postgres: {
