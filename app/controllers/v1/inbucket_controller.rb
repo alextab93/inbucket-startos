@@ -1,6 +1,5 @@
 module V1
   class InbucketController < ApplicationController
-    before_action :set_private_cache_headers
     before_action :require_session!
 
     rescue_from InbucketClient::Unavailable, with: :render_inbucket_unavailable
@@ -38,11 +37,6 @@ module V1
 
     def render_inbucket_invalid_response
       render json: { error: "inbucket_invalid_response" }, status: :bad_gateway
-    end
-
-    def set_private_cache_headers
-      response.headers["Cache-Control"] = "private, no-store"
-      response.headers["Pragma"] = "no-cache"
     end
   end
 end

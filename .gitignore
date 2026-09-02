@@ -5,6 +5,7 @@ node_modules/
 .vscode/
 docker-images
 javascript
-ncc-cachepublic
+ncc-cache
 log/*
 tmp/*
+/public/

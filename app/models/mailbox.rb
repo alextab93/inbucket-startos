@@ -1,4 +1,6 @@
 class Mailbox < ApplicationRecord
+  has_many :inbucket_messages, primary_key: :name, foreign_key: :mailbox, dependent: :delete_all, inverse_of: false
+
   normalizes :name, with: ->(name) { name.strip }
 
   validates :name, presence: true, length: { maximum: 255 }, uniqueness: true

@@ -36,6 +36,7 @@ COPY app ./app
 COPY bin ./bin
 COPY config ./config
 COPY db ./db
+COPY lib ./lib
 COPY config.ru Rakefile ./
 
 COPY --from=frontend /build/public ./public
