@@ -12,7 +12,7 @@ const dict = {
   'Programmatic access to Inbucket mailboxes and messages': 8,
   'Receive messages for the configured disposable mail domain': 9,
   'Web Client Interface': 10,
-  'Authenticated mailbox reading, monitoring, source viewing, CID images, and attachment downloads': 11,
+  'Authenticated mailbox reading, live updates, source viewing, CID images, and attachment downloads': 11,
   'The web client interface is ready': 12,
   'The web client interface is not ready': 13,
   'Client Database': 14,
@@ -50,6 +50,9 @@ const dict = {
   'Maximum Message Size': 46,
   'Maximum accepted SMTP message size in MiB, including headers and MIME encoding.': 47,
   Forever: 48,
+  'Client Reconciler': 49,
+  'The client reconciler is ready': 50,
+  'The client reconciler is not ready': 51,
 } as const
 
 /**
