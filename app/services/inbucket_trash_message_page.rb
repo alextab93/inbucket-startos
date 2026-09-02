@@ -17,7 +17,7 @@ class InbucketTrashMessagePage
     records = page_records(relation)
     page = records.first(limit)
     {
-      messages: page.map(&:rendered_summary),
+      messages: TrashedMessage.rendered_summaries(user:, records: page),
       next_cursor: records.length > limit ? encode_cursor(page.last) : nil,
       total_count: relation.count,
       trash_count: user.trashed_messages.count,

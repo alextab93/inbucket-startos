@@ -38,6 +38,5 @@ module V1
     def render_inbucket_invalid_response
       render json: { error: "inbucket_invalid_response" }, status: :bad_gateway
     end
-
   end
 end

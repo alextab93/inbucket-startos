@@ -51,7 +51,7 @@ Three subcontainers run: `inbucket` (upstream), `client-postgres`, and `client-a
 
 ## Authenticated Client Architecture
 
-The authenticated client is a client-rendered React 19.2 application. Rails serves its generated files and provides the private same-origin API. The browser never receives the authored TypeScript, tests, `node_modules`, database credentials, Rails signing key, or StartOS configuration. It receives inspectable compiled JavaScript, so the frontend uses relative paths and the HttpOnly session cookie instead of compiled configuration values.
+The authenticated client is a client-rendered React application. Rails serves its generated files and provides the private same-origin API. The browser never receives the authored TypeScript, tests, `node_modules`, database credentials, Rails signing key, or StartOS configuration. It receives inspectable compiled JavaScript, so the frontend uses relative paths and the HttpOnly session cookie instead of compiled configuration values.
 
 ### Component hierarchy
 
@@ -176,45 +176,6 @@ The document CSP remains `default-src 'self'; base-uri 'self'; connect-src 'self
 
 The Makefile treats the Dockerfile, lockfiles, Gemfiles, Vite configuration, Rails source, database files, support library, and complete `frontend/` tree as client build inputs. A change to any of them invalidates the architecture-specific `.s9pk` target even when `start-cli s9pk list-ingredients` does not enumerate the full Docker context. Release candidates still use `make clean x86` and `make clean arm` so validation never depends on a cached client image or stale `public/` output.
 
-### Local development
-
-Install locked dependencies, start a real PostgreSQL test or development database, and run the checks from the repository root:
-
-```sh
-npm ci
-npm run check
-npm test
-bundle exec rspec
-```
-
-For browser development, run Rails as the same-origin API and static server in one terminal and Vite's production build watcher in another:
-
-```sh
-bundle exec rails server -p 3000
-npm run build:frontend:watch
-```
-
-The watcher writes fresh fingerprinted output into `public/`, which Rails serves with the same origin, session cookie, Origin validation, email-frame endpoint, downloads, and CSP used by production. There is no Vite development-server proxy. A normal production build is `npm run build:frontend`; `npm run check` runs both StartOS and frontend TypeScript configurations.
-
-### React 19.2 feature decisions
-
-- `<Activity>` is deferred. The four views remain mounted to preserve their user controls and use the native `hidden` attribute for inactive output.
-- `useEffectEvent` is deferred. Polling, request, renderer, and listener lifecycles have small explicit dependency sets and abort or clean up directly.
-- React Compiler is deferred. The client has no measured rendering bottleneck that justifies adding its build integration after parity validation.
-- The client does not use speculative `memo`, `useMemo`, or `useCallback`. Callback identity is stabilized only where an Effect lifecycle requires it.
-
-### Framework-neutral acceptance scenarios
-
-1. Restore a valid session or show the correct signed-out, expired, or unavailable state. Sign in and sign out through visible results with disabled pending controls.
-2. Switch among Mailboxes, Starred, Archived, and Trash, then use direct loading, reload, and browser back or forward to restore the view and any supported selected message from its canonical query URL. Confirm a legacy Monitor URL safely opens Mailboxes.
-3. Open Saved mailboxes, add and open an archived name, select one or several saved mailboxes, and see one deterministic combined list. Archive selected names, restore an archived mailbox, confirm a purge only from Archived, and retain failed names after partial results.
-4. Search every documented field, switch mutually exclusive read filters, apply every sort, preserve stable ties, place unknown values last, and show the matching empty explanation. In Starred, also filter across all mailboxes or one mailbox.
-5. Open a message, mark it read only after success, star and unstar it with visible rollback after failure, keep it unread after read failure, view source, list and download attachments, move it to Trash, restore it, permanently delete it with confirmation, and prevent stale responses after rapid message switching.
-6. Create, rename, recolor, assign, remove, filter by, and delete user-owned tags through visible results. Verify all ten named colors and a custom color, exact rollback after failure, reusable definitions after assignment removal, and no cross-user metadata exposure.
-7. Render sanitized HTML, plaintext, CID and safe data images, safe external links, blocked unsafe content, and remote images only after consent inside the isolated frame.
-8. Deliver, repeat, and delete live messages while Mailboxes is open and while another view is active. Confirm all-active live updates are enabled by default, turning them off limits arrivals to the selection, and no historical messages load merely because the toggle is enabled. Confirm full identity deduplication, pagination, focus, retry reporting, expiration, and the unavailable selected-message outcome. Show Trash loading, empty, filtered, sorted, unavailable, restore, confirmed direct deletion, confirmed empty, partial-failure, and per-message outcomes. Show Archived loading, empty, partial-count, catalog-error, restore, confirmed delete, and failure results.
-9. Complete the representative workflows with keyboard access, focus return, labels, headings, live announcements, and desktop, tablet, and mobile layouts.
-
 ## Volume and Data Layout
 
 Two volumes: received mail on one, the client's own state on the other.
@@ -272,12 +233,12 @@ Two actions, both user-facing.
 
 ### Configure Inbucket
 
-- **When to run it:** First at install, prompted by the task; afterwards to change the accepted domain, storage limits, or maximum SMTP message size.
+- **When to run it** — at install, prompted by the task; afterwards to change the accepted domain, the storage limits, or the maximum SMTP message size.
 - **What the domain is** — a literal match against the recipient address, nothing more. It is never resolved, and the package never verifies ownership, so a reserved name like `mailbox.test` is a perfectly valid answer for someone only feeding Inbucket from their own applications. A domain the user owns is needed only to receive mail from the internet, which additionally needs the port-25 forward under [Limitations](#limitations-and-differences).
-- **What it changes:** The domain, retention period, per-mailbox cap, and maximum SMTP message size in `store.json`. The form is pre-filled with what is already saved. Choosing **Forever** disables automatic message expiration, and a per-mailbox cap of `0` allows unlimited messages. Either unlimited setting can fill the data volume. The message-size limit remains finite, accepts 1 to 100 MiB, and defaults to 50 MiB.
+- **What it changes** — the domain, retention period, per-mailbox cap, and maximum SMTP message size in `store.json`. The form is pre-filled with what is already saved. Choosing **Forever** disables automatic message expiration, and a per-mailbox cap of `0` allows unlimited messages. Either unlimited setting can fill the data volume. The message-size limit remains finite, accepts 1 to 100 MiB, and defaults to 50 MiB.
 - **Cost** — instant to save. The new values reach Inbucket on its next start.
 - **Repeat safety** — idempotent.
-- **What happens next:** Restart to apply. Changing the domain does not rename existing mailboxes, and mail for the old domain stops being accepted. Lowering retention or the message cap deletes stored messages that no longer fit. Lowering the SMTP message-size limit rejects future messages above that limit.
+- **What happens next** — restart to apply. Changing the domain does not rename existing mailboxes, and mail for the old domain stops being accepted. Lowering retention or the message cap deletes stored messages that no longer fit. Lowering the SMTP message-size limit rejects future messages above that limit.
 - **Outputs** — none.
 
 ### Set Admin Password
