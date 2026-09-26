@@ -1,4 +1,4 @@
-import { FileHelper, z } from '@start9labs/start-sdk'
+import { FileHelper, smtpShape, z } from '@start9labs/start-sdk'
 import { sdk } from '../sdk'
 
 export const domainRegex =
@@ -13,9 +13,16 @@ export const storeShape = z.looseObject({
   secretKeyBase: z.string().min(64).catch(''),
   adminUsername: z.string().trim().min(1).default('admin'),
   adminPassword: z.string().min(16).catch(''),
+  luaEventToken: z.string().min(32).catch(''),
+  smtp: smtpShape.catch({ selection: 'disabled', value: {} }),
 })
 
 export const storeJson = FileHelper.json(
   { base: sdk.volumes.main, subpath: './store.json' },
   storeShape,
 )
+
+export const ruleLuaFile = FileHelper.string({
+  base: sdk.volumes.main,
+  subpath: 'config/inbucket.lua',
+})

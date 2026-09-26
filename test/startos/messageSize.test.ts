@@ -5,6 +5,7 @@ import {
   inbucketEnvironment,
   mibToBytes,
 } from '../../startos/inbucketEnvironment'
+import { smtpEnvironment } from '../../startos/smtp'
 
 const validStore = {
   domain: 'mail.example.com',
@@ -14,6 +15,7 @@ const validStore = {
   secretKeyBase: 's'.repeat(64),
   adminUsername: 'admin',
   adminPassword: 'p'.repeat(16),
+  luaEventToken: 't'.repeat(48),
 }
 
 describe('maximum SMTP message size', () => {
@@ -49,12 +51,42 @@ describe('maximum SMTP message size', () => {
       { smtp: 2500, web: 9000, pop3: 1100 },
     )
     assert.equal(env.INBUCKET_SMTP_MAXMESSAGEBYTES, '52428800')
+    assert.equal(env.INBUCKET_LUA_PATH, '/config/inbucket.lua')
 
     const customEnv = inbucketEnvironment(
       { ...validStore, maxMessageSizeMb: 25 },
       { smtp: 2500, web: 9000, pop3: 1100 },
     )
     assert.equal(customEnv.INBUCKET_SMTP_MAXMESSAGEBYTES, '26214400')
+  })
+})
+
+describe('outbound notification SMTP configuration', () => {
+  it('defaults missing stored SMTP settings to disabled', () => {
+    assert.equal(storeShape.parse(validStore).smtp.selection, 'disabled')
+    assert.deepEqual(smtpEnvironment(null), { OUTBOUND_SMTP_ENABLED: 'false' })
+  })
+
+  it('passes configured SMTP credentials only to the notification client environment', () => {
+    assert.deepEqual(
+      smtpEnvironment({
+        host: 'smtp.example.com',
+        port: '587',
+        username: 'notification-user',
+        password: 'notification-password',
+        from: 'inbucket@example.com',
+        security: 'starttls',
+      }),
+      {
+        OUTBOUND_SMTP_ENABLED: 'true',
+        OUTBOUND_SMTP_HOST: 'smtp.example.com',
+        OUTBOUND_SMTP_PORT: '587',
+        OUTBOUND_SMTP_USERNAME: 'notification-user',
+        OUTBOUND_SMTP_PASSWORD: 'notification-password',
+        OUTBOUND_SMTP_FROM: 'inbucket@example.com',
+        OUTBOUND_SMTP_SECURITY: 'starttls',
+      },
+    )
   })
 })
 

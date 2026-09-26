@@ -22,3 +22,10 @@ export const mounts = sdk.Mounts.of()
     mountpoint: '/storage',
     readonly: false,
   })
+
+export const clientMounts = sdk.Mounts.of().mountVolume({
+  volumeId: 'main',
+  subpath: 'config',
+  mountpoint: '/inbucket-config',
+  readonly: false,
+})

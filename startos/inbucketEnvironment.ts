@@ -26,4 +26,5 @@ export const inbucketEnvironment = (
   INBUCKET_STORAGE_PARAMS: 'path:/storage',
   INBUCKET_STORAGE_RETENTIONPERIOD: config.retentionPeriod,
   INBUCKET_STORAGE_MAILBOXMSGCAP: String(config.mailboxMessageCap),
+  INBUCKET_LUA_PATH: '/config/inbucket.lua',
 })

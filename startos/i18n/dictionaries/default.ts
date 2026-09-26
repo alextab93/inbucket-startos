@@ -53,6 +53,11 @@ const dict = {
   'Client Reconciler': 49,
   'The client reconciler is ready': 50,
   'The client reconciler is not ready': 51,
+  'Configure SMTP': 52,
+  'Configure outbound notification email delivery.': 53,
+  'Notification Delivery Worker': 54,
+  'The notification delivery worker is ready': 55,
+  'The notification delivery worker is not ready': 56,
 } as const
 
 /**

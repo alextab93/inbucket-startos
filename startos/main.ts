@@ -2,8 +2,11 @@ import { storeJson } from './fileModels/store.json'
 import { i18n } from './i18n'
 import { inbucketEnvironment } from './inbucketEnvironment'
 import { sdk } from './sdk'
+import { smtpEnvironment, toSmtpValue, type SmtpEnvironmentInput } from './smtp'
 import {
   clientPort,
+  clientHostId,
+  clientMounts,
   databaseName,
   databaseUser,
   mounts,
@@ -48,9 +51,47 @@ export const main = sdk.setupMain(async ({ effects }) => {
     !config.databasePassword ||
     !config.secretKeyBase ||
     !config.adminUsername ||
-    !config.adminPassword
+    !config.adminPassword ||
+    !config.luaEventToken
   ) {
     throw new Error('Inbucket client secrets have not been initialized')
+  }
+
+  const clientInterface = await sdk.host
+    .getOwn(
+      effects,
+      clientHostId,
+      (host) => host?.bindings[clientPort]?.interfaces.client ?? null,
+    )
+    .const()
+  const addressInfo = clientInterface?.addressInfo ?? null
+  const firstAddress = (addresses: string[] | undefined) =>
+    addresses?.length ? addresses[0] : null
+  const clientPublicUrl =
+    firstAddress(addressInfo?.public.format('urlstring')) ??
+    firstAddress(addressInfo?.nonLocal.format('urlstring')) ??
+    `http://localhost:${clientPort}`
+
+  let smtp: SmtpEnvironmentInput | null = null
+  if (config.smtp.selection === 'system') {
+    const systemSmtp = await sdk.getSystemSmtp(effects).const()
+    if (systemSmtp) {
+      smtp = toSmtpValue({
+        ...systemSmtp,
+        from: config.smtp.value.customFrom || systemSmtp.from,
+      })
+    }
+  }
+  if (config.smtp.selection === 'custom') {
+    const provider = config.smtp.value.provider.value
+    smtp = {
+      host: provider.host,
+      port: provider.security.value.port,
+      username: provider.username,
+      password: provider.password,
+      from: provider.from,
+      security: provider.security.selection,
+    }
   }
 
   const clientEnv = {
@@ -62,6 +103,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
     INBUCKET_BASE_URL: `http://127.0.0.1:${webPort}`,
     ADMIN_USERNAME: config.adminUsername,
     ADMIN_PASSWORD: config.adminPassword,
+    LUA_EVENT_TOKEN: config.luaEventToken,
+    LUA_SCRIPT_PATH: '/inbucket-config/inbucket.lua',
+    LUA_COMPILER: 'luac5.4',
+    CLIENT_PUBLIC_URL: clientPublicUrl,
+    ...smtpEnvironment(smtp),
   }
 
   const inbucketSubcontainer = sdk.SubContainer.of(
@@ -86,44 +132,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
   const clientSubcontainer = sdk.SubContainer.of(
     effects,
     { imageId: 'client' },
-    sdk.Mounts.of(),
+    clientMounts,
     'client-app',
   )
 
   return sdk.Daemons.of(effects)
-    .addDaemon('inbucket', {
-      subcontainer: inbucketSubcontainer,
-      exec: {
-        command: sdk.useEntrypoint(),
-        env: inbucketEnvironment(config, {
-          smtp: smtpPort,
-          web: webPort,
-          pop3: pop3Port,
-        }),
-      },
-      ready: {
-        display: i18n('Admin Web Interface'),
-        gracePeriod: 60000,
-        fn: () =>
-          sdk.healthCheck.checkPortListening(effects, webPort, {
-            successMessage: i18n('The admin web interface is ready'),
-            errorMessage: i18n('The admin web interface is not ready'),
-          }),
-      },
-      requires: [],
-    })
-    .addHealthCheck('smtp', {
-      ready: {
-        display: i18n('Inbound SMTP'),
-        gracePeriod: 60000,
-        fn: () =>
-          sdk.healthCheck.checkPortListening(effects, smtpPort, {
-            successMessage: i18n('The inbound SMTP listener is ready'),
-            errorMessage: i18n('The inbound SMTP listener is not ready'),
-          }),
-      },
-      requires: ['inbucket'],
-    })
     .addDaemon('client-postgres', {
       subcontainer: postgresSubcontainer,
       exec: {
@@ -159,6 +172,47 @@ export const main = sdk.setupMain(async ({ effects }) => {
       subcontainer: clientSubcontainer,
       exec: { command: ['bin/rails', 'db:prepare'], env: clientEnv },
       requires: ['client-postgres'],
+    })
+    .addOneshot('client-lua-prepare', {
+      subcontainer: clientSubcontainer,
+      exec: {
+        command: ['bin/rails', 'runner', 'RuleLuaScript.write!'],
+        env: clientEnv,
+      },
+      requires: ['client-database-prepare'],
+    })
+    .addDaemon('inbucket', {
+      subcontainer: inbucketSubcontainer,
+      exec: {
+        command: sdk.useEntrypoint(),
+        env: inbucketEnvironment(config, {
+          smtp: smtpPort,
+          web: webPort,
+          pop3: pop3Port,
+        }),
+      },
+      ready: {
+        display: i18n('Admin Web Interface'),
+        gracePeriod: 60000,
+        fn: () =>
+          sdk.healthCheck.checkPortListening(effects, webPort, {
+            successMessage: i18n('The admin web interface is ready'),
+            errorMessage: i18n('The admin web interface is not ready'),
+          }),
+      },
+      requires: ['client-lua-prepare'],
+    })
+    .addHealthCheck('smtp', {
+      ready: {
+        display: i18n('Inbound SMTP'),
+        gracePeriod: 60000,
+        fn: () =>
+          sdk.healthCheck.checkPortListening(effects, smtpPort, {
+            successMessage: i18n('The inbound SMTP listener is ready'),
+            errorMessage: i18n('The inbound SMTP listener is not ready'),
+          }),
+      },
+      requires: ['inbucket'],
     })
     .addOneshot('client-account-prepare', {
       subcontainer: clientSubcontainer,
@@ -207,6 +261,24 @@ export const main = sdk.setupMain(async ({ effects }) => {
         ),
       },
       requires: ['inbucket', 'client-account-prepare'],
+    })
+    .addDaemon('notification-delivery-worker', {
+      subcontainer: clientSubcontainer,
+      exec: {
+        command: ['bin/rails', 'runner', 'NotificationDeliveryWorker.run'],
+        env: clientEnv,
+      },
+      ready: {
+        display: i18n('Notification Delivery Worker'),
+        gracePeriod: 120000,
+        fn: probe(
+          clientSubcontainer,
+          ['test', '-f', '/tmp/notification-delivery-ready'],
+          i18n('The notification delivery worker is ready'),
+          i18n('The notification delivery worker is not ready'),
+        ),
+      },
+      requires: ['client-account-prepare'],
     })
     .addDaemon('client', {
       subcontainer: clientSubcontainer,
